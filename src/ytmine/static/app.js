@@ -669,6 +669,19 @@ function showExtensionState() {
 document.addEventListener("ytmine-extension", showExtensionState);
 showExtensionState();
 
+// Started from a shortcut or at login, ytmine has no window to close, so the page can stop it.
+$("quit-btn").addEventListener("click", async () => {
+  if (!confirm("Quit ytmine? Your cards are saved. Start it again with the ytmine shortcut.")) return;
+  try {
+    const { token } = await api("/api/pairing");
+    await api("/api/shutdown", { method: "POST", headers: { "X-Ytmine-Token": token } });
+  } catch (e) { toast(e.message, true); return; }
+  const banner = $("banner");
+  banner.textContent = "ytmine has stopped. You can close this tab. Start it again with the ytmine shortcut, or run ytmine.";
+  banner.hidden = false;
+  $("quit-btn").disabled = true;
+});
+
 $("copy-token").addEventListener("click", async () => {
   try {
     const { token } = await api("/api/pairing");

@@ -142,5 +142,11 @@ $("anki").addEventListener("click", async () => {
 
 $("all").addEventListener("change", refresh);
 $("options").addEventListener("click", (event) => { event.preventDefault(); YTM_API.runtime.openOptionsPage(); });
+// The full ytmine page, for when ytmine runs in the background (shortcut or start at login).
+$("open").addEventListener("click", async (event) => {
+  event.preventDefault();
+  window.open(ytmLocalServer((await ytmGetSettings()).server), "_blank");
+  window.close();
+});
 
 refresh();
