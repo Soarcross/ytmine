@@ -575,11 +575,36 @@ $("export-btn").addEventListener("click", async () => {
 $("anki-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/anki/send", { method: "POST", body: { scope: state.sessionAll ? "all" : "session" } });
-    let message = `Sent to Anki: ${r.added} added, ${r.skipped} already there.`;
-    if (r.errors.length) message += `\n${r.errors.length} failed: ${r.errors[0]}`;
-    toast(message, r.errors.length > 0);
+    toast(`Anki imported ${r.notes} note${r.notes === 1 ? "" : "s"}. Notes it already had were updated.`);
   } catch (e) { toast(e.message, true); }
 });
+
+// ---------------------------------------------------------------- settings
+
+const CARD_TYPE_BOXES = {
+  listening: "set-listening", reading: "set-reading",
+  vocab_recognition: "set-recognition", vocab_production: "set-production",
+};
+
+async function loadSettings() {
+  try {
+    const cfg = await api("/api/settings");
+    for (const [key, id] of Object.entries(CARD_TYPE_BOXES)) $(id).checked = !!cfg.card_types[key];
+    $("set-split").value = cfg.deck_split;
+  } catch (e) { /* the settings panel just keeps its defaults */ }
+}
+
+async function saveSettings() {
+  const card_types = {};
+  for (const [key, id] of Object.entries(CARD_TYPE_BOXES)) card_types[key] = $(id).checked;
+  try {
+    await api("/api/settings", { method: "PUT", body: { card_types, deck_split: $("set-split").value } });
+    toast("Card settings saved.");
+  } catch (e) { toast(e.message, true); }
+}
+
+$("settings").addEventListener("change", saveSettings);
+loadSettings();
 
 // ---------------------------------------------------------------- loading
 

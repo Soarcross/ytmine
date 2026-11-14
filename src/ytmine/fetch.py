@@ -52,6 +52,7 @@ class VideoData:
     zh_source: str
     en_vtt: str | None = None
     en_source: str | None = None
+    channel: str = ""  # uploader name, used for tags and optional subdecks
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -198,6 +199,7 @@ def fetch_video(url: str, cache_dir: Path) -> VideoData:
         zh_source=zh.label,
         en_vtt=en_text,
         en_source=en.label if en else None,
+        channel=str(info.get("channel") or info.get("uploader") or ""),
     )
 
 

@@ -38,6 +38,20 @@
           <button id="export-btn">Download .apkg</button>
           <button id="anki-btn">Send to Anki</button>
         </div>
+        <details id="settings">
+          <summary>Card settings</summary>
+          <label class="toggle small"><input type="checkbox" id="set-listening"> Sentence: listening card</label>
+          <label class="toggle small"><input type="checkbox" id="set-reading"> Sentence: reading card</label>
+          <label class="toggle small"><input type="checkbox" id="set-recognition"> Vocab: recognition card</label>
+          <label class="toggle small"><input type="checkbox" id="set-production"> Vocab: production card</label>
+          <label class="toggle small">Subdecks for sentences
+            <select id="set-split">
+              <option value="none">one deck</option>
+              <option value="channel">split by channel</option>
+              <option value="video">split by video</option>
+            </select>
+          </label>
+        </details>
         <ul id="cards"></ul>
       </section>
     </section>

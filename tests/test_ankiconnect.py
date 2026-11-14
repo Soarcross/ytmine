@@ -1,20 +1,18 @@
-import base64
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from ytmine.ankiconnect import AnkiConnectError, invoke, send_cards
+from ytmine.ankiconnect import AnkiConnectError, import_package, invoke
 
 
 class FakeAnki:
-    """A tiny AnkiConnect stand-in that records calls and rejects duplicate fronts."""
+    """A tiny AnkiConnect stand-in that records calls and answers importPackage."""
 
     def __init__(self):
         self.calls = []
-        self.models = []
-        self.fronts = set()
+        self.import_ok = True
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -38,17 +36,8 @@ class FakeAnki:
     def handle(self, action, params):
         if action == "version":
             return 6, None
-        if action == "modelNames":
-            return list(self.models), None
-        if action == "createModel":
-            self.models.append(params["modelName"])
-            return {}, None
-        if action == "addNote":
-            front = params["note"]["fields"]["Front"]
-            if front in self.fronts:
-                return None, "cannot create note because it is a duplicate"
-            self.fronts.add(front)
-            return 1, None
+        if action == "importPackage":
+            return self.import_ok, None
         return None, None
 
     def close(self):
@@ -62,38 +51,20 @@ def anki():
     fake.close()
 
 
-def make_card(n=1):
-    return {
-        "id": f"v_{n}",
-        "lang": "zh",
-        "video_id": "abcdefghijk",
-        "start": 1.0,
-        "end": 2.0,
-        "sentence": f"句子{n}",
-        "pinyin": "",
-        "english": "",
-        "target": "",
-        "audio_file": f"clip{n}.mp3",
-    }
+def test_import_package_asks_anki_to_import_the_file(anki, tmp_path):
+    package = tmp_path / "deck.apkg"
+    package.write_bytes(b"zip")
+    import_package(package, anki.url)
+    assert [c["action"] for c in anki.calls] == ["version", "importPackage"]
+    assert anki.calls[1]["params"]["path"] == str(package.resolve())
 
 
-def test_send_cards_creates_model_uploads_audio_and_adds_notes(anki, tmp_path):
-    (tmp_path / "clip1.mp3").write_bytes(b"mp3 bytes")
-    result = send_cards([make_card(1)], tmp_path, "My Deck", anki.url)
-    assert (result.added, result.skipped, result.errors) == (1, 0, [])
-    actions = [c["action"] for c in anki.calls]
-    assert actions[:4] == ["version", "modelNames", "createModel", "createDeck"]
-    store = next(c for c in anki.calls if c["action"] == "storeMediaFile")
-    assert base64.b64decode(store["params"]["data"]) == b"mp3 bytes"
-    note = next(c for c in anki.calls if c["action"] == "addNote")["params"]["note"]
-    assert note["deckName"] == "My Deck"
-    assert note["fields"]["Audio"] == "[sound:clip1.mp3]"
-
-
-def test_duplicates_are_skipped_not_failed(anki, tmp_path):
-    send_cards([make_card(1)], tmp_path, "D", anki.url)
-    result = send_cards([make_card(1), make_card(2)], tmp_path, "D", anki.url)
-    assert (result.added, result.skipped) == (1, 1)
+def test_import_refused_by_anki_explains_the_sandbox_case(anki, tmp_path):
+    anki.import_ok = False
+    package = tmp_path / "deck.apkg"
+    package.write_bytes(b"zip")
+    with pytest.raises(AnkiConnectError, match="Flatpak"):
+        import_package(package, anki.url)
 
 
 def test_unreachable_anki_gives_a_helpful_message():

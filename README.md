@@ -11,7 +11,7 @@ It runs on your own computer. There is no account, no server, no tracking and no
 - Lets you click any word to blank it out (a cloze card), with word boundaries from jieba.
 - Looks words up in the CC-CEDICT dictionary (pinyin, definitions, simplified and traditional forms) and recognises idioms (chengyu) and sayings, so 一举两得 stays one unit and a saying with a comma in it is found as a whole. Without the dictionary everything else still works.
 - Cleans up messy subtitles: removes the repeated text in auto-captions, strips tags and sound cues like [音乐], and joins sentences that were split across cues.
-- Exports an Anki `.apkg` file with the audio included, or sends the cards straight to a running Anki through AnkiConnect.
+- Exports an Anki `.apkg` file with the audio included, or has a running Anki import it through AnkiConnect. Mined lines become sentence cards (listening and reading), and a clicked word also becomes a vocab card, filed in `Sentences` and `Vocab` subdecks with tags.
 - Remembers what you have mined in a history file, so the same sentence is never mined twice.
 
 ## Screenshots
@@ -111,17 +111,34 @@ A thin blue bar on the left of a line shows which line `M` would mine right now.
 
 Some channels upload subtitles with no punctuation, cut every few seconds. ytmine notices this and joins the pieces back into sentences, using words a Chinese clause rarely ends on (一个, 的, 和) and words that usually start one (但是, 所以). The status line tells you when it did this. If a card still cuts a sentence in half, add lines with Shift+Left or Shift+Right before pressing M.
 
+### Cards and decks
+
+Each mined line becomes a sentence note. If you clicked a word first, it also becomes a vocab note for that word.
+
+Sentence notes have two cards:
+
+- Listening: the audio and the sentence with your chosen word blanked. The back shows the full sentence, the word, pinyin, English, the definition and a link to the video at that moment.
+- Reading: the sentence with the word highlighted and no audio. The audio plays on the back.
+
+Vocab notes (one per word, not one per sentence) have a recognition card, which shows the word and answers with pinyin, definition and your example sentence with its audio, and an optional production card, which shows the definition and the sentence with the word blanked. If you mine the same word again from another video, ytmine keeps the first note and adds the new sentence to it as an extra example.
+
+Open Card settings under the card list to switch card types on or off. Production is off by default. You can also put sentences into subdecks by channel or by video. Choices are saved in `config.json`.
+
+Decks are laid out as `<deck name>::Sentences` and `<deck name>::Vocab`, with `<deck name>::Sentences::<channel>` if you split by channel. Notes are tagged `ytmine`, `ytmine::video::<id>` and `ytmine::channel::<name>`, and idioms and sayings also get `ytmine::kind::chengyu` or `ytmine::kind::suyu`, so you can filter by them in Anki's browser. The card styling follows Anki's night mode.
+
 ### Sending cards to Anki
 
 Download .apkg gives you a file to import. The deck and note type IDs are fixed, so importing a newer export updates the same deck and notes instead of making copies.
 
-Send to Anki adds the notes directly. Anki must be running with the [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on installed (code 2055492159). If Anki is closed, ytmine tells you so. Cards already in the deck are skipped.
+Send to Anki makes the same file and asks Anki to import it through the [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on (code 2055492159). Anki must be running. Both routes use the same note types and the same note IDs, so you can use either one, or both, without getting duplicates. Anki reads the file from your disk, so if Anki runs in a sandbox that cannot see it (Flatpak or Snap), Send to Anki reports an error. Use Download .apkg in that case.
 
-Use one route or the other for a given deck. Importing an `.apkg` and sending through AnkiConnect create separate note types with the same name.
+Each note in an `.apkg` carries the time the card was mined or last edited in ytmine. When you import a newer export, Anki only replaces notes you have not changed in Anki since then, so your edits in Anki are kept. A vocab note counts as changed when you mine another example for it.
 
-Each note in an `.apkg` carries the time the card was mined or last edited in ytmine. When you import a newer export, Anki only replaces notes you have not changed in Anki since then, so your edits in Anki are kept.
+### If you used an earlier version
 
-The card front shows the sentence (with the blank if you picked a word) and plays the audio. The back shows the full sentence, the blanked word, pinyin, English, and a link that opens the video at that moment.
+Cards mined before the vocab and subdeck update stay on the original "ytmine Mandarin sentence" note type and in the original deck, and they keep exporting that way. Nothing in your existing Anki collection is changed or moved. New mining goes to the new note types, in the `Sentences` and `Vocab` subdecks.
+
+If you used Send to Anki before, those notes were added one by one with random IDs. Sending those cards again now imports them with a stable ID, which Anki does not match to the old copies, so you would get a second copy. Delete the old copies in Anki first if you want a single one.
 
 ### Where your data lives
 
@@ -140,11 +157,18 @@ The exact directories are chosen by [platformdirs](https://pypi.org/project/plat
 {
   "padding": 0.3,
   "deck_name": "ytmine Mandarin",
-  "ankiconnect_url": "http://127.0.0.1:8765"
+  "ankiconnect_url": "http://127.0.0.1:8765",
+  "deck_split": "none",
+  "card_types": {
+    "listening": true,
+    "reading": true,
+    "vocab_recognition": true,
+    "vocab_production": false
+  }
 }
 ```
 
-`padding` is the number of seconds of audio added before and after each line. `ankiconnect_url` must point at localhost.
+`padding` is the number of seconds of audio added before and after each line. `ankiconnect_url` must point at localhost. `deck_split` is `none`, `channel` or `video`. The card settings in the web page write `card_types` and `deck_split` here.
 
 ## FAQ
 

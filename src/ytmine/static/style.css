@@ -200,3 +200,7 @@ kbd {
   #transcript-wrap { height: 60vh; }
   header { flex-wrap: wrap; }
 }
+
+#settings { margin: 8px 0; font-size: 14px; }
+#settings summary { cursor: pointer; }
+#settings label { display: block; margin: 4px 0; }

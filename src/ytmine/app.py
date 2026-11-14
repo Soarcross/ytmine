@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
 from ytmine import ankiconnect, clips, export
-from ytmine.config import Settings
+from ytmine.config import DECK_SPLITS, DEFAULT_CARD_TYPES, Settings
 from ytmine.deps import ffmpeg_install_help, find_ffmpeg
 from ytmine.fetch import FetchError, VideoData, download_audio, fetch_video, watch_url
 from ytmine.history import History
@@ -98,6 +98,17 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             "audio_url": f"/api/cards/{card['id']}/audio" if card.get("audio_file") else None,
             "link": watch_url(card["video_id"], card["start"]),
             "parts": parts._asdict() if parts else None,
+        }
+
+    def target_info(target: str) -> dict:
+        """What the dictionary says about a target word, saved on the card when it is mined.
+
+        Saved so a deck can be exported later without the dictionary (it may be offline).
+        """
+        entries = [e.to_dict() for e in lang.lookup(target)][:4] if target else []
+        return {
+            "target_entries": entries,
+            "target_kind": export.card_kind({}, entries) if entries else "",
         }
 
     def top_kind(entries) -> str:
@@ -318,6 +329,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             "audio_file": audio_file,
             "session_id": session_id,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "note_v": 2,  # new note types; cards without this stay on the original one
+            "channel": video.data.channel,
+            **target_info(target),
         }
         history.add(card)
         return jsonify(card_view(card)), 201
@@ -362,6 +376,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             changes["target_start"] = len(parts.before)
         else:
             changes["target_start"] = None
+        if target != (card.get("target") or ""):
+            changes.update(target_info(target))
 
         return jsonify(card_view(history.update(card_id, changes)))
 
@@ -385,31 +401,84 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             abort(404)
         return send_file(path, mimetype="audio/mpeg")
 
+    # -- settings ----------------------------------------------------------
+
+    def settings_view() -> dict:
+        return {
+            "card_types": settings.card_types,
+            "deck_split": settings.deck_split,
+            "deck_name": settings.deck_name,
+        }
+
+    @app.get("/api/settings")
+    def get_settings():
+        return jsonify(settings_view())
+
+    @app.put("/api/settings")
+    def put_settings():
+        body = request.get_json(silent=True) or {}
+        types = body.get("card_types", {})
+        if not isinstance(types, dict) or any(
+            k not in DEFAULT_CARD_TYPES or not isinstance(v, bool) for k, v in types.items()
+        ):
+            return error(
+                "card_types must map listening, reading, vocab_recognition and "
+                "vocab_production to true or false."
+            )
+        split = body.get("deck_split", settings.deck_split)
+        if split not in DECK_SPLITS:
+            return error(f"deck_split must be one of: {', '.join(DECK_SPLITS)}.")
+        deck_name = body.get("deck_name", settings.deck_name)
+        if not isinstance(deck_name, str) or not deck_name.strip() or "::" in deck_name:
+            return error("The deck name cannot be empty or contain '::'.")
+        settings.card_types.update(types)
+        settings.deck_split, settings.deck_name = split, deck_name.strip()
+        try:
+            settings.save_card_settings()
+        except OSError as exc:
+            return error(f"Could not save the settings: {exc}", 500)
+        return jsonify(settings_view())
+
     # -- export ------------------------------------------------------------
+
+    def build_export(scope: str):
+        """Build the package for `scope`, or return an error response."""
+        cards = cards_for(scope)
+        if not cards:
+            return None, error("No cards to export yet. Mine a line first.")
+        package = export.build_package(
+            cards,
+            settings.media_dir,
+            settings.deck_name,
+            export.ExportOptions.from_settings(settings),
+        )
+        if export.note_count(package) == 0:
+            return None, error("Every card type is switched off in the settings.")
+        return package, None
 
     @app.get("/api/export.apkg")
     def export_deck():
-        cards = cards_for(request.args.get("scope", "session"))
-        if not cards:
-            return error("No cards to export yet. Mine a line first.")
+        package, problem = build_export(request.args.get("scope", "session"))
+        if problem:
+            return problem
         name = f"ytmine-{time.strftime('%Y%m%d-%H%M%S')}.apkg"
-        path = export.export_apkg(
-            cards, settings.media_dir, settings.deck_name, settings.exports_dir / name
-        )
+        path = settings.exports_dir / name
+        package.write_to_file(str(path))
         return send_file(path, as_attachment=True, download_name=name)
 
     @app.post("/api/anki/send")
     def send_to_anki():
+        """Have Anki import the same .apkg the Download button gives you."""
         scope = (request.get_json(silent=True) or {}).get("scope", "session")
-        cards = cards_for(scope)
-        if not cards:
-            return error("No cards to send yet. Mine a line first.")
+        package, problem = build_export(scope)
+        if problem:
+            return problem
+        path = settings.exports_dir / f"ytmine-send-{time.strftime('%Y%m%d-%H%M%S')}.apkg"
+        package.write_to_file(str(path))
         try:
-            result = ankiconnect.send_cards(
-                cards, settings.media_dir, settings.deck_name, settings.ankiconnect_url
-            )
+            ankiconnect.import_package(path, settings.ankiconnect_url)
         except ankiconnect.AnkiConnectError as exc:
             return error(str(exc), 502)
-        return jsonify(added=result.added, skipped=result.skipped, errors=result.errors)
+        return jsonify(notes=export.note_count(package))
 
     return app

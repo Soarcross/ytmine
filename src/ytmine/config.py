@@ -13,13 +13,21 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import platformdirs
 
 APP_NAME = "ytmine"
 log = logging.getLogger(__name__)
+
+DEFAULT_CARD_TYPES = {
+    "listening": True,
+    "reading": True,
+    "vocab_recognition": True,
+    "vocab_production": False,
+}
+DECK_SPLITS = ("none", "channel", "video")
 
 
 @dataclass
@@ -30,6 +38,11 @@ class Settings:
     padding: float = 0.3  # seconds of audio added before and after each clip
     ankiconnect_url: str = "http://127.0.0.1:8765"
     deck_name: str = "ytmine Mandarin"
+    # Which Anki card types to generate. Listening and Reading are the two sentence cards,
+    # Recognition and Production the two vocab cards. Production is off by default.
+    card_types: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_CARD_TYPES))
+    deck_split: str = "none"  # none, channel or video: extra subdecks under Sentences
+    config_file: Path | None = None  # where changes made in the web UI are saved
 
     @property
     def media_dir(self) -> Path:
@@ -58,7 +71,8 @@ class Settings:
             if cache_env
             else platformdirs.user_cache_path(APP_NAME, False),
         )
-        settings._apply_config_file(config_path())
+        settings.config_file = config_path()
+        settings._apply_config_file(settings.config_file)
         return settings
 
     def _apply_config_file(self, path: Path) -> None:
@@ -77,6 +91,31 @@ class Settings:
         for key in ("ankiconnect_url", "deck_name", "language"):
             if isinstance(data.get(key), str) and data[key].strip():
                 setattr(self, key, data[key].strip())
+        if data.get("deck_split") in DECK_SPLITS:
+            self.deck_split = data["deck_split"]
+        if isinstance(data.get("card_types"), dict):
+            for key in DEFAULT_CARD_TYPES:
+                if isinstance(data["card_types"].get(key), bool):
+                    self.card_types[key] = data["card_types"][key]
+
+    def save_card_settings(self) -> None:
+        """Write the card options back into config.json, keeping any other keys the user set."""
+        if self.config_file is None:
+            return
+        data: dict = {}
+        if self.config_file.is_file():
+            try:
+                loaded = json.loads(self.config_file.read_text(encoding="utf-8"))
+                data = loaded if isinstance(loaded, dict) else {}
+            except (OSError, ValueError):
+                data = {}
+        data.update(
+            card_types=self.card_types, deck_split=self.deck_split, deck_name=self.deck_name
+        )
+        self.config_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.config_file.with_name(self.config_file.name + ".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, self.config_file)
 
 
 def config_path() -> Path:
