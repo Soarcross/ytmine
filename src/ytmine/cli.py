@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import platform
 import shutil
 import socket
 import sys
 import threading
 import webbrowser
 
-from ytmine import __version__
+from ytmine import __version__, instance
 from ytmine.config import Settings
 from ytmine.deps import ffmpeg_install_help, find_ffmpeg
 
 DEFAULT_PORT = 8787  # not 8765, which AnkiConnect uses
+LOG_LIMIT = 1_000_000  # bytes; a bigger log is set aside at start-up
+# Where Homebrew and MacPorts put ffmpeg. Apps started from the Finder or at login on macOS get a
+# bare PATH without them.
+MAC_TOOL_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin")
 
 
 def _port_is_free(host: str, port: int) -> bool:
@@ -35,6 +41,41 @@ def _pick_port(host: str, preferred: int, explicit: bool) -> int | None:
     return None
 
 
+def _log_to_file(settings: Settings) -> None:
+    """Send output to a log file, for runs with no console (shortcut, start at login)."""
+    log = settings.cache_dir / "ytmine.log"
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if log.exists() and log.stat().st_size > LOG_LIMIT:
+            log.replace(log.with_name("ytmine.old.log"))
+        stream = open(log, "a", encoding="utf-8", buffering=1)  # noqa: SIM115 (open until exit)
+    except OSError:
+        stream = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    sys.stdout = sys.stderr = stream
+
+
+def _add_mac_tool_dirs() -> None:
+    if platform.system() != "Darwin":
+        return
+    parts = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    missing = [d for d in MAC_TOOL_DIRS if d not in parts and os.path.isdir(d)]
+    os.environ["PATH"] = os.pathsep.join(parts + missing)
+
+
+def _stop(settings: Settings, port: int) -> int:
+    from ytmine.pairing import load_or_create_token
+
+    running = instance.find_running(port)
+    if running is None:
+        print("ytmine is not running.")
+        return 0
+    if instance.request_stop(running, load_or_create_token(settings.token_file)):
+        print(f"Stopped ytmine at http://{instance.HOST}:{running}/")
+        return 0
+    print("ytmine did not stop. Close it from where it was started.", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ytmine", description="Sentence-mine Mandarin from YouTube videos into Anki."
@@ -51,11 +92,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print the browser extension pairing token, then exit",
     )
+    parser.add_argument("--stop", action="store_true", help="stop the ytmine that is running")
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="write messages to a log file instead of the terminal "
+        "(the shortcut and start at login use this)",
+    )
     parser.add_argument("--version", action="version", version=f"ytmine {__version__}")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     settings = Settings.load()
+    # pythonw (the Windows shortcut) has no console at all: sys.stdout is None there.
+    if args.background or sys.stdout is None or sys.stderr is None:
+        _log_to_file(settings)
+        _add_mac_tool_dirs()
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
     if args.clear_cache:
         shutil.rmtree(settings.cache_dir, ignore_errors=True)
@@ -68,6 +120,18 @@ def main(argv: list[str] | None = None) -> int:
         print(load_or_create_token(settings.token_file))
         return 0
 
+    if args.stop:
+        return _stop(settings, args.port or DEFAULT_PORT)
+
+    # Started twice (say, from the shortcut while it already runs from login): open the running one.
+    running = instance.find_running(args.port or DEFAULT_PORT)
+    if running is not None and (args.port is None or running == args.port):
+        url = f"http://{instance.HOST}:{running}/"
+        print(f"ytmine is already running at {url}")
+        if not args.no_browser:
+            webbrowser.open(url)
+        return 0
+
     if find_ffmpeg() is None:
         print(ffmpeg_install_help(), file=sys.stderr)
         print("ytmine will still start, but mining needs ffmpeg.\n", file=sys.stderr)
@@ -77,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from ytmine.app import create_app
 
-    host = "127.0.0.1"  # local only; never listen on the network
+    host = instance.HOST  # local only; never listen on the network
     port = _pick_port(host, args.port or DEFAULT_PORT, explicit=args.port is not None)
     if port is None:
         print("Could not find a free port. Try: ytmine --port 9000", file=sys.stderr)
@@ -85,16 +149,23 @@ def main(argv: list[str] | None = None) -> int:
 
     app = create_app(settings)
     server = make_server(host, port, app, threaded=True)
+    # `ytmine --stop` arrives through /api/shutdown. shutdown() waits for serve_forever() to
+    # return, so it has to run on a thread of its own.
+    app.config["SHUTDOWN"] = lambda: threading.Thread(target=server.shutdown, daemon=True).start()
     url = f"http://{host}:{port}/"
     print(f"ytmine {__version__} is running at {url}")
     print(f"Your data is stored in {settings.data_dir}")
     print("The browser extension connects by itself while the ytmine page is open.")
     print(f"(Manual pairing token, if you ever need it: {app.config['PAIRING_TOKEN']})")
-    print("Press Ctrl+C to stop.")
+    print("Press Ctrl+C to stop, or run: ytmine --stop")
     if not args.no_browser:
         threading.Timer(0.8, webbrowser.open, args=(url,)).start()
+    instance.record(port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nBye!")
+    finally:
+        instance.forget()
+        server.server_close()
     return 0

@@ -243,6 +243,17 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.post("/api/shutdown")
+    def shutdown():
+        """Stop the server (`ytmine --stop`). Always needs the token, whoever asks."""
+        if not token_matches(request.headers.get(TOKEN_HEADER), pairing_token):
+            abort(403)
+        stop = app.config.get("SHUTDOWN")
+        if stop is None:
+            return error("This server cannot be stopped from here.", 503)
+        threading.Timer(0.2, stop).start()  # let this answer go out first
+        return jsonify(ok=True)
+
     @app.get("/api/info")
     def info():
         ffmpeg = services.find_ffmpeg()
