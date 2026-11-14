@@ -227,6 +227,22 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     def static_files(name: str):
         return send_from_directory(STATIC_DIR, name)
 
+    @app.get("/api/pairing")
+    def pairing():
+        """The pairing token, for ytmine's own page only.
+
+        The extension's helper script on this page reads it here and saves it, so users never
+        have to copy it by hand. Handing it to our own page gives nothing away: that page can
+        already use the whole API without a token. Everything else is refused, including
+        navigations, other sites, extensions and header-less clients (which can read the file).
+        """
+        same_page = request.headers.get("Sec-Fetch-Site") == "same-origin"
+        if not same_page or request.headers.get("Sec-Fetch-Mode") == "navigate":
+            abort(403)
+        response = jsonify(token=pairing_token)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/api/info")
     def info():
         ffmpeg = services.find_ffmpeg()

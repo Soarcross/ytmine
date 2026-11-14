@@ -40,13 +40,20 @@
 
   // ---------------------------------------------------------------- status banner
 
-  function showStatus(s, message, { retry = false, autoHideMs = 0 } = {}) {
+  function showStatus(s, message, { retry = false, openYtmine = false, autoHideMs = 0 } = {}) {
     if (!s.statusEl) {
       s.statusEl = document.createElement("div");
       s.statusEl.className = "ytm-banner";
       s.root.appendChild(s.statusEl);
     }
     s.statusEl.textContent = message;
+    if (openYtmine) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Open ytmine";
+      button.addEventListener("click", () => window.open(ytmLocalServer(settings.server), "_blank"));
+      s.statusEl.appendChild(button);
+    }
     if (retry) {
       const button = document.createElement("button");
       button.type = "button";
@@ -84,13 +91,25 @@
     if (mySeq !== seq) return;
     if (!reply.ok) {
       const message = ytmProblem(reply) || (reply.data && reply.data.error) || "ytmine could not load this video.";
-      showStatus(s, `ytmine: ${message}`, { retry: true });
+      showStatus(s, `ytmine: ${message}`, { retry: true, openYtmine: ytmNeedsPairing(reply) });
+      if (ytmNeedsPairing(reply)) retryWhenPaired(s, mySeq);
       return;
     }
     const data = reply.data;
     s.lines = data.lines;
     s.starts = data.lines.map((l) => l.start);
     mount(s, data);
+  }
+
+  /** Once the extension pairs itself (from the ytmine page), load this video again. */
+  function retryWhenPaired(s, mySeq) {
+    const onStorage = (changes) => {
+      if (!changes.token && !changes.server) return;
+      YTM_API.storage.onChanged.removeListener(onStorage);
+      if (mySeq === seq && session === s) { stop(); start(); }
+    };
+    YTM_API.storage.onChanged.addListener(onStorage);
+    s.listeners.push([{ removeEventListener: () => YTM_API.storage.onChanged.removeListener(onStorage) }, "", null, false]);
   }
 
   function stop() {

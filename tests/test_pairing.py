@@ -261,3 +261,41 @@ def test_chromes_extension_get_has_no_origin_but_must_carry_the_token(client, to
 @pytest.mark.parametrize("headers", [{}, {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate"}])
 def test_a_wrong_token_is_refused_even_with_no_origin(client, headers):
     assert get(client, headers={**headers, TOKEN_HEADER: "wrong"}).status_code == 403
+
+
+# -- handing the token to our own page ----------------------------------------------------
+
+
+SAME_PAGE = {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors"}
+
+
+def test_our_own_page_can_read_the_token(client, token):
+    response = get(client, path="/api/pairing", headers=SAME_PAGE)
+    assert response.status_code == 200
+    assert response.get_json() == {"token": token}
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},  # header-less client: it can read the token file instead
+        {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate"},  # typed into the address bar
+        {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "navigate"},
+        {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"},  # a link from a site
+        {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors"},  # <script src>
+        {"Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "cors"},  # another localhost port
+        {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "cors"},  # an extension's GET
+    ],
+)
+def test_nobody_else_can_read_the_token(client, headers):
+    assert get(client, path="/api/pairing", headers=headers).status_code == 403
+
+
+def test_web_pages_and_extensions_cannot_read_the_token(client, token):
+    page = {"Origin": "https://www.youtube.com", **SAME_PAGE}
+    assert get(client, path="/api/pairing", headers=page).status_code == 403
+    # Even the paired extension gets nothing here: it already has the token.
+    assert get(client, origin=EXT, token=token, path="/api/pairing").status_code == 403
+    rebound = {"Host": "evil.example", **SAME_PAGE}  # DNS rebinding
+    assert get(client, path="/api/pairing", headers=rebound).status_code == 403

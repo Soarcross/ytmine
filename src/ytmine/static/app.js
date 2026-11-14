@@ -657,6 +657,26 @@ async function saveSettings() {
 $("settings").addEventListener("change", saveSettings);
 loadSettings();
 
+// ---------------------------------------------------------------- browser extension
+
+// The extension's helper script marks this page once it has paired itself with the server.
+function showExtensionState() {
+  const state = document.documentElement.dataset.ytmineExtension;
+  const el = $("ext-state");
+  el.textContent = state === "connected" ? "(connected)" : "";
+  el.className = state === "connected" ? "ok" : "";
+}
+document.addEventListener("ytmine-extension", showExtensionState);
+showExtensionState();
+
+$("copy-token").addEventListener("click", async () => {
+  try {
+    const { token } = await api("/api/pairing");
+    await navigator.clipboard.writeText(token);
+    toast("Pairing token copied. Paste it in the extension's options, under Manual setup.");
+  } catch (e) { toast(e.message || "Could not copy the token.", true); }
+});
+
 // ---------------------------------------------------------------- loading
 
 $("pinyin-toggle").addEventListener("change", (e) => {

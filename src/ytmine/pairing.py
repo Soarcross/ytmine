@@ -2,8 +2,12 @@
 
 The server only answers its own page. A browser extension is a different origin, so it has to
 prove it is the one the user set up: it sends this token in a header. The token is random,
-created on first run, kept in the user's config directory and printed at startup, and the user
-pastes it into the extension's options page once.
+created on first run and kept in the user's config directory.
+
+Users do not copy it by hand. The extension has a helper script on ytmine's own page that reads
+the token from /api/pairing (which answers only that page) and saves it. This gives nothing away:
+our page, and any extension able to script it, can already use the whole API without a token.
+The token is also printed at startup and by `ytmine --show-token`, for manual setup.
 
 Only requests whose Origin is an extension (chrome-extension:// or moz-extension://) can use
 the token. A web page, youtube.com included, never gets in with it.

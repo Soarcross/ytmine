@@ -36,17 +36,31 @@ def test_the_extension_may_only_reach_this_computer(manifest):
     assert hosts and all(h.startswith(("http://127.0.0.1/", "http://localhost/")) for h in hosts)
 
 
-def test_the_content_script_runs_on_youtube_only(manifest):
-    (script,) = manifest["content_scripts"]
-    assert script["matches"] == ["https://www.youtube.com/*"]
-    assert script["js"] == ["shared.js", "overlay.js", "content.js"]  # order matters
+def test_the_content_scripts_run_on_youtube_and_the_local_pairing_page_only(manifest):
+    youtube, pairing = manifest["content_scripts"]
+    assert youtube["matches"] == ["https://www.youtube.com/*"]
+    assert youtube["js"] == ["shared.js", "overlay.js", "content.js"]  # order matters
+    # The pairing helper runs on local pages only and needs nothing else.
+    assert pairing["matches"] == ["http://127.0.0.1/*", "http://localhost/*"]
+    assert pairing["js"] == ["pair.js"]
+    assert "css" not in pairing
+
+
+def test_the_pairing_helper_stays_quiet_on_other_local_pages():
+    # Other local web servers must never see a request from it: it checks the marker first.
+    source = (EXT / "pair.js").read_text(encoding="utf-8")
+    marker = 'meta[name="ytmine-pairing"]'
+    assert marker in source
+    assert source.index(marker) < source.index("/api/pairing")
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="ytmine-pairing"' in page
 
 
 def test_every_file_the_manifest_names_exists(manifest):
-    (script,) = manifest["content_scripts"]
+    scripts = manifest["content_scripts"]
     names = [
-        *script["js"],
-        *script["css"],
+        *(name for script in scripts for name in script["js"]),
+        *(name for script in scripts for name in script.get("css", [])),
         manifest["background"]["service_worker"],
         *manifest["background"]["scripts"],
         manifest["action"]["default_popup"],

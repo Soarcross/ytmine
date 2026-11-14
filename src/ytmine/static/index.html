@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ytmine</title>
+  <!-- Tells the ytmine browser extension that this is ytmine's page, so it can pair itself. -->
+  <meta name="ytmine-pairing" content="1">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -54,6 +56,13 @@
               <option value="video">split by video</option>
             </select>
           </label>
+        </details>
+        <details id="extension-panel">
+          <summary>Browser extension <span id="ext-state"></span></summary>
+          <p id="ext-help">The ytmine extension for youtube.com connects by itself when this page is open.
+            If it says it is not connected, reload this page. If that does not help, copy the pairing token
+            and paste it in the extension's options, under Manual setup.</p>
+          <button id="copy-token" type="button">Copy pairing token</button>
         </details>
         <ul id="cards"></ul>
       </section>

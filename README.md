@@ -195,15 +195,16 @@ It is not on any extension store. You load it from the `extension` folder of thi
 
 1. Download or clone this repository. You need the `extension` folder.
 2. Open `chrome://extensions`, switch on Developer mode, press Load unpacked and choose the `extension` folder.
-3. Start ytmine. It prints a pairing token. If you missed it, run `ytmine --show-token`.
-4. Open the extension's options page (right-click its icon, then Options). Paste the token into Pairing token and press Save and test. You only do this once.
-5. Open a YouTube video that has Chinese subtitles. The captions appear over the video after a few seconds.
+3. Start ytmine. Its page opens in your browser, and the extension connects to it by itself. The extension's options page (it opens when you install the extension) turns green and says "Connected". If ytmine was already running, press Open ytmine there, or reload the ytmine page.
+4. Open a YouTube video that has Chinese subtitles. The captions appear over the video after a few seconds.
+
+If it does not connect by itself, pair it by hand: on the ytmine page, open Browser extension (under the card list) and press Copy pairing token. Then open the extension's options (right-click its icon, then Options), open Manual setup, paste the token and press Save and test. `ytmine --show-token` also prints the token.
 
 ### Install in Firefox
 
 1. Open `about:debugging#/runtime/this-firefox` and press Load Temporary Add-on.
 2. Choose `extension/manifest.json`.
-3. Pair it in the options page as above.
+3. Start ytmine or reload its page. It connects as above.
 
 Firefox removes a temporary add-on when it closes, so you repeat step 1 each time. The Firefox version has not been tested yet.
 
@@ -224,13 +225,14 @@ You can change them in the options page. They do nothing while you are typing in
 
 The toolbar icon opens a list of this session's cards, with Edit and Delete, plus Download .apkg and Send to Anki.
 
-If ytmine is not running, the video shows "Start ytmine on your computer". If the token is missing or wrong, it says so and tells you where to paste it.
+If ytmine is not running, the video shows "Start ytmine on your computer". If the extension is not connected yet, the video says so and has an Open ytmine button. Once the ytmine page has opened, the video loads by itself.
 
 ### What the extension is allowed to do
 
-- It runs only on `https://www.youtube.com/`, and it can talk only to `127.0.0.1` and `localhost`. It asks for the `storage` permission and nothing else.
+- It runs on `https://www.youtube.com/`, plus a small helper on pages at `127.0.0.1` and `localhost` that does nothing unless the page is ytmine's own. It can talk only to `127.0.0.1` and `localhost`. It asks for the `storage` permission and nothing else.
 - The ytmine server still refuses every web page, youtube.com included. The extension does not call the server from the YouTube page. A background worker in the extension makes the requests, so they come from the extension and not from youtube.com, and they carry the pairing token.
-- The token is a random value made the first time ytmine runs and saved in your config directory (`pairing_token`, next to `config.json`). Anyone who has it and runs an extension on your computer can use ytmine, so treat it like a password. Delete the file and restart ytmine to get a new one.
+- The token is a random value made the first time ytmine runs and saved in your config directory (`pairing_token`, next to `config.json`). Anyone who has it and runs an extension on your computer can use ytmine, so treat it like a password. Delete the file and restart ytmine to get a new one. The extension picks up the new token the next time the ytmine page opens.
+- The extension gets the token from ytmine's own page. The server gives it only to that page, which could already use ytmine without it, and refuses every other website and extension.
 - The extension sends the token only to the server address in its options, and refuses an address that is not on your computer.
 - Cards, history and audio stay on your computer, as before. The extension makes no other network requests.
 

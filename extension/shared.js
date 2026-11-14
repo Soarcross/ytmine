@@ -94,11 +94,25 @@ async function ytmRequest(path, { method = "GET", body, binary = false } = {}) {
 /** The message to show when the server could not be reached or refused us, or "" if it answered. */
 function ytmProblem(reply) {
   if (reply.error === "reloaded") return "The ytmine extension was reloaded. Refresh this page.";
-  if (reply.error === "no-token") return "Open the ytmine extension options and paste the pairing token that ytmine prints when it starts.";
+  if (reply.error === "no-token") return "Not connected yet. Open the ytmine page once (it opens when you start ytmine) and the extension connects by itself.";
   if (reply.error === "bad-server") return "The server address in the ytmine extension options must be on this computer (127.0.0.1 or localhost).";
   if (reply.error === "unreachable") return "Start ytmine on your computer, then try again.";
-  if (reply.status === 403) return "ytmine refused the pairing token. Paste the current token into the extension options (run ytmine --show-token to see it).";
+  if (reply.status === 403) return "ytmine has a new pairing token. Open the ytmine page once and the extension reconnects by itself.";
   return "";
+}
+
+/** The saved server address if it is on this computer, else the default one. */
+function ytmLocalServer(server) {
+  try {
+    const url = new URL(server);
+    if (url.protocol === "http:" && ["127.0.0.1", "localhost"].includes(url.hostname)) return url.origin;
+  } catch (e) { /* fall through */ }
+  return YTM_DEFAULTS.server;
+}
+
+/** True when the fix is to open the ytmine page so the extension can pair itself. */
+function ytmNeedsPairing(reply) {
+  return reply.error === "no-token" || (reply.status === 403 && reply.error === undefined);
 }
 
 /** Like ytmRequest, but resolves to the JSON data and throws a readable error on any failure. */

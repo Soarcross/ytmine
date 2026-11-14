@@ -62,8 +62,36 @@ async function callServer({ path, method = "GET", body, binary = false }) {
   return { ok: response.ok, status: response.status, data };
 }
 
+/** Save the token that pair.js read from ytmine's own page, after checking it works there. */
+async function pair(message, sender) {
+  // The address comes from the tab the message was sent from, never from the message itself.
+  let origin;
+  try { origin = new URL(sender.url).origin; } catch (e) { return { ok: false }; }
+  const base = serverBase(origin);
+  const token = message.token;
+  if (!base || typeof token !== "string" || token.length < 20) return { ok: false };
+  try {
+    const response = await fetch(base + "/api/info", { headers: { [TOKEN_HEADER]: token } });
+    if (!response.ok) return { ok: false };
+  } catch (e) {
+    return { ok: false };
+  }
+  const saved = await api.storage.local.get({ server: DEFAULT_SERVER, token: "" });
+  if (saved.server !== base || saved.token !== token) await api.storage.local.set({ server: base, token });
+  return { ok: true };
+}
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (sender.id !== api.runtime.id || !message || message.type !== "api") return false;
-  callServer(message).then(sendResponse, () => sendResponse({ ok: false, status: 0, error: "unreachable" }));
+  if (sender.id !== api.runtime.id || !message) return false;
+  const fail = () => sendResponse({ ok: false, status: 0, error: "unreachable" });
+  if (message.type === "api") callServer(message).then(sendResponse, fail);
+  else if (message.type === "pair") pair(message, sender).then(sendResponse, fail);
+  else return false;
   return true; // the answer is sent asynchronously
+});
+
+// A first install opens the options page, which says how to connect.
+api.runtime.onInstalled.addListener((details) => {
+  // It can fail if no browser window is open yet; the toolbar popup links to the options too.
+  if (details.reason === "install") Promise.resolve(api.runtime.openOptionsPage()).catch(() => {});
 });

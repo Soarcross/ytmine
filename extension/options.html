@@ -20,6 +20,11 @@
     #result { margin-top: 8px; min-height: 1.5em; }
     .ok { color: #15803d; } .bad { color: #b91c1c; }
     code { background: rgba(127, 127, 127, 0.2); padding: 0 4px; border-radius: 4px; }
+    .conn { padding: 10px 12px; border-radius: 6px; border: 1px solid rgba(127, 127, 127, 0.4); font-weight: 600; }
+    .conn.ok { border-color: #15803d; background: rgba(21, 128, 61, 0.12); }
+    .conn.bad { border-color: #b45309; background: rgba(180, 83, 9, 0.12); }
+    ol { padding-left: 22px; } li { margin: 4px 0; }
+    details { margin-top: 20px; } summary { cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -27,18 +32,33 @@
   <p class="hint">This extension shows ytmine's captions on youtube.com. The ytmine program must be running on this computer.</p>
 
   <h2>Connection</h2>
-  <label for="server">Server address</label>
-  <input id="server" type="text" autocomplete="off" spellcheck="false">
-  <p class="hint">Leave this as it is unless you started ytmine on another port. It must be on this computer.</p>
-
-  <label for="token">Pairing token</label>
-  <div class="row">
-    <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from ytmine">
-    <button id="show" type="button">Show</button>
+  <div id="conn" class="conn" role="status">Checking…</div>
+  <div id="steps" hidden>
+    <ol>
+      <li>Start ytmine on this computer. Its page opens in your browser.</li>
+      <li>Keep that page open for a moment. The extension connects by itself, and this box turns green.</li>
+    </ol>
+    <p class="hint">ytmine already running? Press the button to open its page.</p>
+    <div class="row"><button id="open" type="button">Open ytmine</button></div>
   </div>
-  <p class="hint">ytmine prints the token when it starts. To see it again, run <code>ytmine --show-token</code>. You only need to paste it once.</p>
-  <div class="row"><button id="test" type="button">Save and test</button></div>
-  <div id="result" role="status"></div>
+
+  <details id="manual">
+    <summary>Manual setup</summary>
+    <p class="hint">You only need this if connecting by itself does not work.</p>
+    <label for="server">Server address</label>
+    <input id="server" type="text" autocomplete="off" spellcheck="false">
+    <p class="hint">The address of the ytmine page. It must be on this computer.</p>
+
+    <label for="token">Pairing token</label>
+    <div class="row">
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from ytmine">
+      <button id="show" type="button">Show</button>
+    </div>
+    <p class="hint">On the ytmine page, open Browser extension (under the card list) and press Copy pairing token.
+      You can also run <code>ytmine --show-token</code> in a terminal.</p>
+    <div class="row"><button id="test" type="button">Save and test</button></div>
+    <div id="result" role="status"></div>
+  </details>
 
   <h2>Captions</h2>
   <label><input id="hide" type="checkbox"> Hide YouTube's own captions while ytmine's are showing</label>

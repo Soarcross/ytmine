@@ -88,10 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     url = f"http://{host}:{port}/"
     print(f"ytmine {__version__} is running at {url}")
     print(f"Your data is stored in {settings.data_dir}")
-    print(f"Browser extension pairing token: {app.config['PAIRING_TOKEN']}")
-    print(
-        "(paste it into the extension's options page once; `ytmine --show-token` prints it again)"
-    )
+    print("The browser extension connects by itself while the ytmine page is open.")
+    print(f"(Manual pairing token, if you ever need it: {app.config['PAIRING_TOKEN']})")
     print("Press Ctrl+C to stop.")
     if not args.no_browser:
         threading.Timer(0.8, webbrowser.open, args=(url,)).start()
