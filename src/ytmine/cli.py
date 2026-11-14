@@ -97,6 +97,23 @@ def _shortcut(create: bool) -> int:
     return 0
 
 
+def _autostart(on: bool) -> int:
+    from ytmine import launcher
+
+    try:
+        paths = launcher.set_autostart(on)
+    except (launcher.LauncherError, OSError) as exc:
+        print(f"Could not change start at login: {exc}", file=sys.stderr)
+        return 1
+    if on:
+        print(f"ytmine will start by itself, in the background, when you log in ({paths[0]}).")
+        print("It opens no browser tab then. Open the page with the shortcut or the extension.")
+        print("To start it now without waiting, run: ytmine")
+    else:
+        print("ytmine will no longer start at login." if paths else "Start at login was off.")
+    return 0
+
+
 def _shortcut_tip() -> str:
     """One line suggesting the shortcut, shown at start-up in a terminal until one exists."""
     from ytmine import launcher
@@ -136,6 +153,11 @@ def main(argv: list[str] | None = None) -> int:
         "--remove-shortcut", action="store_true", help="remove the icon --create-shortcut added"
     )
     parser.add_argument(
+        "--autostart",
+        choices=("on", "off"),
+        help="start ytmine in the background whenever you log in (on), or stop doing that (off)",
+    )
+    parser.add_argument(
         "--background",
         action="store_true",
         help="write messages to a log file instead of the terminal "
@@ -167,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.create_shortcut or args.remove_shortcut:
         return _shortcut(create=args.create_shortcut)
+
+    if args.autostart:
+        return _autostart(args.autostart == "on")
 
     # Started twice (say, from the shortcut while it already runs from login): open the running one.
     running = instance.find_running(args.port or DEFAULT_PORT)

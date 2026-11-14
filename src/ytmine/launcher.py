@@ -139,6 +139,47 @@ def shortcut_exists(places: Places | None = None) -> bool:
     return places.xdg_menu_entry().exists()
 
 
+# -- starting at login --------------------------------------------------------------------
+
+
+def set_autostart(on: bool, places: Places | None = None) -> list[Path]:
+    """Start ytmine (in the background, no browser tab) when the user logs in, or stop doing so.
+    Returns the files written or removed."""
+    places = places or Places.here()
+    python = python_for_launch(places.system)
+    args = launch_args(True)
+    if places.system == "Windows":
+        path = places.startup() / f"{NAME}.lnk"
+        return [_write_lnk(path, python, args, places)] if on else _removed(path)
+    if places.system == "Darwin":
+        path = places.mac_agent()
+        if not on:
+            return _removed(path)
+        agent = {
+            "Label": MAC_AGENT,
+            "ProgramArguments": [str(python), *args],
+            "RunAtLoad": True,
+            "ProcessType": "Interactive",
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(plistlib.dumps(agent))
+        return [path]
+    path = places.xdg_autostart()
+    if not on:
+        return _removed(path)
+    _write_text(path, _desktop_entry(python, args, extra="X-GNOME-Autostart-enabled=true\n"))
+    return [path]
+
+
+def autostart_enabled(places: Places | None = None) -> bool:
+    places = places or Places.here()
+    if places.system == "Windows":
+        return (places.startup() / f"{NAME}.lnk").exists()
+    if places.system == "Darwin":
+        return places.mac_agent().exists()
+    return places.xdg_autostart().exists()
+
+
 # -- writers ------------------------------------------------------------------------------
 
 

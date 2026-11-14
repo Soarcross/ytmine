@@ -175,3 +175,60 @@ def test_cli_reports_a_failure(linux_here, monkeypatch, capsys):
     monkeypatch.setattr(launcher, "create_shortcut", broken)
     assert cli.main(["--create-shortcut"]) == 1
     assert "no PowerShell here" in capsys.readouterr().err
+
+
+# -- starting at login --------------------------------------------------------------------
+
+
+def test_linux_autostart(tmp_path, spacey_python):
+    where = places(tmp_path, "Linux", XDG_CONFIG_HOME=str(tmp_path / "cfg"))
+    assert not launcher.autostart_enabled(where)
+    (entry,) = launcher.set_autostart(True, where)
+    assert entry == tmp_path / "cfg" / "autostart" / "ytmine.desktop"
+    text = entry.read_text(encoding="utf-8")
+    assert "-m ytmine --background --no-browser\n" in text
+    assert "X-GNOME-Autostart-enabled=true\n" in text
+    assert launcher.autostart_enabled(where)
+    assert launcher.set_autostart(False, where) == [entry]
+    assert not launcher.autostart_enabled(where)
+    assert launcher.set_autostart(False, where) == []
+
+
+def test_mac_launch_agent(tmp_path, spacey_python):
+    where = places(tmp_path, "Darwin")
+    (agent,) = launcher.set_autostart(True, where)
+    assert agent.parent == tmp_path / "home" / "Library" / "LaunchAgents"
+    data = plistlib.loads(agent.read_bytes())
+    assert data["Label"] == agent.stem
+    assert data["RunAtLoad"] is True
+    assert data["ProgramArguments"] == [
+        str(Path(SPACEY_PYTHON)),
+        "-m",
+        "ytmine",
+        "--background",
+        "--no-browser",
+    ]
+    assert launcher.autostart_enabled(where)
+    assert launcher.set_autostart(False, where) == [agent]
+    assert not agent.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="needs Windows to make .lnk files")
+def test_windows_startup_folder(tmp_path):
+    where = places(tmp_path, "Windows", APPDATA=str(tmp_path / "Roaming"))
+    (lnk,) = launcher.set_autostart(True, where)
+    assert lnk == where.startup() / "ytmine.lnk"
+    assert _read_lnk(lnk)["args"] == "-m ytmine --background --no-browser"
+    assert launcher.autostart_enabled(where)
+    assert launcher.set_autostart(False, where) == [lnk]
+    assert not launcher.autostart_enabled(where)
+
+
+def test_cli_autostart(linux_here, capsys):
+    assert cli.main(["--autostart", "on"]) == 0
+    assert "start by itself" in capsys.readouterr().out
+    assert launcher.autostart_enabled(linux_here)
+    assert cli.main(["--autostart", "off"]) == 0
+    assert "no longer start" in capsys.readouterr().out
+    assert cli.main(["--autostart", "off"]) == 0
+    assert "was off" in capsys.readouterr().out
