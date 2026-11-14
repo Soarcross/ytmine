@@ -87,6 +87,26 @@ python -m ytmine
 
 Your browser opens at `http://127.0.0.1:8787`. If the port is busy, ytmine picks the next free one, or you can choose one with `--port 9000`.
 
+### Start it without a terminal
+
+You only need the terminal once. Run this to add a ytmine icon:
+
+```bash
+ytmine --create-shortcut
+```
+
+On Windows the icon goes on the desktop and in the Start menu, on macOS into Applications (in your home folder), and on Linux into the app menu. Click it to start ytmine. It runs in the background with no window and opens its page. Clicking it again while ytmine runs only opens the page.
+
+To have ytmine start by itself whenever you log in, so the browser extension always works, run:
+
+```bash
+ytmine --autostart on
+```
+
+It then opens no browser tab at login. Open the page with the icon, or with open ytmine in the extension's menu.
+
+To stop ytmine, press Quit ytmine at the top of its page, or run `ytmine --stop`. `ytmine --remove-shortcut` and `ytmine --autostart off` undo the two commands above. A ytmine running in the background writes its messages to `ytmine.log` in your cache directory (see Where your data lives).
+
 1. Paste a YouTube URL and press Load. The video needs Chinese subtitles. Manual subtitles are preferred, and auto-captions are the fallback. The status line under the video tells you which kind was used.
 2. Play the video. Press `M` when you hear a sentence you want.
 3. To blank out a word, click it in the transcript before pressing `M`. Click it again to undo.
@@ -160,9 +180,9 @@ If you used Send to Anki before, those notes were added one by one with random I
 | --- | --- |
 | Mined history and cards | `mined_history.json` in your user data directory |
 | Audio clips, exported decks | `media/` and `exports/` in the same directory |
-| Downloaded audio, subtitles and the dictionary | your user cache directory (`ytmine --clear-cache` deletes it) |
+| Downloaded audio, subtitles, the dictionary and `ytmine.log` | your user cache directory (`ytmine --clear-cache` deletes it) |
 | Caption corrections, words marked as known | `caption_fixes.json` and `known_words.json` in your user data directory |
-| Optional settings, extension pairing token | `config.json` and `pairing_token` in your user config directory |
+| Optional settings, extension pairing token | `config.json`, `pairing_token` and, while ytmine runs, `server.json` in your user config directory |
 
 The exact directories are chosen by [platformdirs](https://pypi.org/project/platformdirs/). ytmine prints the data directory when it starts. You can override the locations with the `YTMINE_DATA_DIR`, `YTMINE_CACHE_DIR` and `YTMINE_CONFIG_DIR` environment variables.
 
