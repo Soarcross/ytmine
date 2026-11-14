@@ -104,12 +104,26 @@ Audio downloads in the background after you load a video. The first mine may wai
 | Left / Right | Jump to the previous or next line. |
 | Shift+Left / Shift+Right | Add the previous or next line to the card, for sentences split over several lines (up to 6 lines or 30 seconds). Shift+click a line does the same. |
 | Esc | Clear the line selection and the blanked word. |
+| F | Go fullscreen, or leave it. |
 
 Click a line to seek to it. Click a word to set it as the blank. If you scroll the transcript yourself, auto-scroll pauses until you press Resume auto-scroll. The Pinyin checkbox shows pinyin above the characters.
 
 A thin blue bar on the left of a line shows which line `M` would mine right now. A green check marks lines you have already mined.
 
 Some channels upload subtitles with no punctuation, cut every few seconds. ytmine notices this and joins the pieces back into sentences, using words a Chinese clause rarely ends on (一个, 的, 和) and words that usually start one (但是, 所以). The status line tells you when it did this. If a card still cuts a sentence in half, add lines with Shift+Left or Shift+Right before pressing M.
+
+### Captions on the video
+
+ytmine also draws the current line over the video. The small buttons at the top right of the video turn the captions on and off (CC), show pinyin (拼), show the English line (EN), colour words by status (●), and go fullscreen (⛶). They are faint until you point at them, and ytmine remembers your choices.
+
+- Rest the mouse on a word for a moment and the video pauses. A popup shows the word's pinyin and definitions, and for idioms and sayings what kind they are. Move the mouse away and playback resumes. If you had paused the video yourself, it stays paused.
+- Idioms, sayings and set phrases are underlined with a dotted line. When a word is part of one, the popup lists the longest match first and the shorter words below it.
+- Click a word to mine the line with that word as the target. That makes the sentence card and the vocab card. If the word is part of a highlighted expression, the longest match is used, and the popup has a Mine button for each shorter one. Click the caption outside a word, or the + button, to mine the line with no target. Shift+click adds the next line to the card. A short message confirms each card, and the word is marked as mined.
+- The popup's Known button marks a word you already know. With ● switched on, new words are underlined in blue, mined words turn green and known words fade.
+- The pencil at the end of a line lets you correct the caption. Press Enter to save. Auto-captions get words wrong (一席崩塌 can come out as 一夕, for example). The corrected text is used for the transcript, the dictionary and the card, and ytmine remembers it the next time you load that video.
+- `F` or the ⛶ button goes fullscreen with the captions, popup and messages still showing. The YouTube player's own fullscreen button is hidden, because it would show only the video and leave the captions behind.
+
+The M key and the other hotkeys work the same as before.
 
 ### Cards and decks
 
@@ -147,6 +161,7 @@ If you used Send to Anki before, those notes were added one by one with random I
 | Mined history and cards | `mined_history.json` in your user data directory |
 | Audio clips, exported decks | `media/` and `exports/` in the same directory |
 | Downloaded audio, subtitles and the dictionary | your user cache directory (`ytmine --clear-cache` deletes it) |
+| Caption corrections, words marked as known | `caption_fixes.json` and `known_words.json` in your user data directory |
 | Optional settings | `config.json` in your user config directory |
 
 The exact directories are chosen by [platformdirs](https://pypi.org/project/platformdirs/). ytmine prints the data directory when it starts. You can override the locations with the `YTMINE_DATA_DIR` and `YTMINE_CACHE_DIR` environment variables.
@@ -182,7 +197,7 @@ Why does a card's audio start or end a little off?
 Subtitle timing is only as good as the uploader made it. Auto-captions are looser than manual ones. Raise `padding` in `config.json` if clips cut off too early.
 
 The Chinese came from auto-captions and has mistakes. What now?
-Auto-caption text is machine generated, and it does get words wrong: it can turn 一席崩塌 into 一夕, for example. Dictionary lookups and idiom detection work on the text as captioned, so a wrong word gives a wrong lookup. Use the Edit button in the card panel to fix a card before exporting.
+Auto-caption text is machine generated, and it does get words wrong: it can turn 一席崩塌 into 一夕, for example. Dictionary lookups and idiom detection work on the text as captioned, so a wrong word gives a wrong lookup. Click the pencil on the video caption to correct a line before you mine it. To fix a card you already mined, use the Edit button in the card panel.
 
 Do I need to click on the page for the hotkeys to work?
 Hotkeys work whenever the page has focus. If you click inside the video, ytmine takes focus back so the keys keep working. Typing in a text field disables the hotkeys while you type.

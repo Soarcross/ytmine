@@ -49,6 +49,14 @@ class Settings:
         return self.data_dir / "media"
 
     @property
+    def known_path(self) -> Path:
+        return self.data_dir / "known_words.json"
+
+    @property
+    def fixes_path(self) -> Path:
+        return self.data_dir / "caption_fixes.json"
+
+    @property
     def exports_dir(self) -> Path:
         return self.data_dir / "exports"
 

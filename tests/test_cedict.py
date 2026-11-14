@@ -116,7 +116,7 @@ def test_corrupt_cache_is_rebuilt(tmp_path, mini_gz):
     d.start()
     assert d.wait(10)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("SELECT count(*) FROM entries").fetchone()[0] == 11
+        assert conn.execute("SELECT count(*) FROM entries").fetchone()[0] == 14
 
 
 def test_stale_cache_survives_failed_refresh(tmp_path, mini_gz, monkeypatch):
@@ -159,3 +159,28 @@ def test_expressions_off_without_dictionary():
     assert lang.expressions("一举两得") == []
     assert lang.lookup("学习") == []
     assert lang.dictionary_status()["state"] == "none"
+
+
+def test_feeding_jieba_keeps_its_own_word_frequencies(dictionary):
+    """Regression: with a fresh jieba, FREQ is empty until it initializes, and an early
+    snapshot of it made every CEDICT word overwrite jieba's real frequency with 1."""
+    import jieba
+
+    tokenizer = jieba.Tokenizer()  # not initialized yet
+    Chinese._feed_jieba(tokenizer, dictionary)
+    assert tokenizer.FREQ["现在"] > 1000  # jieba's own frequency, untouched
+    assert tokenizer.FREQ["一举两得"] > 3  # jieba knows this idiom already, so it was not touched
+    assert list(tokenizer.cut("那你现在去吃吧。")) == ["那", "你", "现在", "去", "吃", "吧", "。"]
+    assert "一举两得" in list(tokenizer.cut("这样做一举两得。"))
+
+
+def test_expressions_skip_accidental_two_character_matches(zh):
+    # "多大" is a headword, but across a comma or as two separate words it is not an expression.
+    assert zh.expressions("多，大") == []
+    assert zh.expressions("去，火") == []
+
+
+def test_expressions_report_three_character_phrases_jieba_splits(zh, monkeypatch):
+    monkeypatch.setattr(zh, "segment", lambda text: list(text))  # pretend jieba split everything
+    assert [s.text for s in zh.expressions("他说不客气")] == ["不客气"]
+    assert zh.expressions("去火") == []  # only two characters, and a plain word

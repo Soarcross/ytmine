@@ -20,12 +20,15 @@
 
   <main>
     <section id="left">
-      <div id="player-wrap">
-        <div id="player"></div>
-        <div id="local-player" hidden>
-          <p id="local-note"></p>
-          <audio id="local-audio" controls preload="auto"></audio>
+      <div id="stage">
+        <div id="player-wrap">
+          <div id="player"></div>
+          <div id="local-player" hidden>
+            <p id="local-note"></p>
+            <audio id="local-audio" controls preload="auto"></audio>
+          </div>
         </div>
+        <div id="overlay-root"></div>
       </div>
       <div id="status">Paste a YouTube video that has Chinese subtitles, then press Load.</div>
 
@@ -67,10 +70,13 @@
   <footer>
     <kbd>M</kbd> mine &nbsp; <kbd>R</kbd> replay &nbsp; <kbd>Space</kbd> play/pause &nbsp;
     <kbd>←</kbd> <kbd>→</kbd> previous/next line &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd>/<kbd>→</kbd> add lines to the card &nbsp;
-    click a line to seek, click a word to blank it
+    <kbd>F</kbd> fullscreen &nbsp;
+    click a line to seek, click a word to blank it &nbsp;|&nbsp;
+    on the video captions: hover a word for its dictionary entry, click it to mine, Shift+click to add the next line
   </footer>
 
   <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/overlay.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

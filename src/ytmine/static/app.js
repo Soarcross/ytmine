@@ -41,6 +41,11 @@ const state = {
 // ---------------------------------------------------------------- helpers
 
 function toast(message, isError = false) {
+  // In fullscreen only #stage is visible, so the message has to be drawn inside it.
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    overlay.toast(message, isError);
+    return;
+  }
   const el = $("toast");
   el.textContent = message;
   el.className = "show" + (isError ? " error" : "");
@@ -109,7 +114,9 @@ function showVideo(videoId) {
   state.player = new YT.Player("player", {
     host: "https://www.youtube-nocookie.com",
     videoId,
-    playerVars: { rel: 0, playsinline: 1, iv_load_policy: 3, origin: location.origin },
+    // fs: 0 hides YouTube's own fullscreen button. It would fullscreen only the iframe and
+    // hide our caption overlay, so the page has its own button (and the F key) for #stage.
+    playerVars: { rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0, origin: location.origin },
     events: {
       onReady: () => (state.playerReady = true),
       onError: (e) => { if (EMBED_BLOCKED.includes(e.data)) setLocalMode(true); },
@@ -164,8 +171,33 @@ function togglePlay() {
   const player = activePlayer();
   if (!player) return;
   const playing = player.getPlayerState() === 1; // YT.PlayerState.PLAYING
+  overlay.noteUserToggle(); // a hover pause must not undo what the user just chose
   if (playing) player.pauseVideo();
   else player.playVideo();
+}
+
+// ---------------------------------------------------------------- fullscreen
+
+// Fullscreen the wrapper that holds both the player and our overlay. The YouTube iframe's own
+// fullscreen button would show only the video, and the captions would disappear.
+function toggleFullscreen() {
+  const stage = $("stage");
+  const current = document.fullscreenElement || document.webkitFullscreenElement;
+  if (current) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else {
+    const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (!request) { toast("This browser does not allow fullscreen here.", true); return; }
+    // The request is refused without a recent click or key press; say so instead of failing silently.
+    Promise.resolve(request.call(stage)).catch(() =>
+      toast("The browser refused fullscreen. Click the page and try again.", true));
+  }
+}
+for (const type of ["fullscreenchange", "webkitfullscreenchange"]) {
+  document.addEventListener(type, () => {
+    window.focus(); // keep the hotkeys working after entering or leaving fullscreen
+    overlay.refresh();
+  });
 }
 
 // Keys pressed after clicking inside the video go to the iframe, not to us.
@@ -293,6 +325,7 @@ function tick() {
     if (state.autoScroll) scrollToLine(idx);
   }
   updateWillMine();
+  overlay.update();
 }
 setInterval(tick, 100);
 
@@ -322,11 +355,11 @@ function stepLine(delta) {
 // Shift+Right adds the next line to the card, Shift+Left adds the previous one
 // (or takes back the last line added). Captions often split one sentence over
 // several lines; this lets one card hold the whole sentence and its audio.
-function extendSpan(delta) {
+function extendSpan(delta, baseIdx) {
   if (!state.lines.length) return;
   let span = state.span;
   if (!span) {
-    const base = lineToMine();
+    const base = baseIdx ?? lineToMine();
     if (base < 0) return;
     span = { from: base, to: base };
   }
@@ -398,28 +431,45 @@ function markMined(range, on = true) {
   for (let i = range.from; i <= range.to; i++) state.lineEls[i]?.classList.toggle("mined", on);
 }
 
+// Mine lines range.from..range.to. `target` picks the word the card is about:
+// {line, text, index} for a word picked in the transcript (index = token number), or
+// {line, text, offset} for a word or expression picked on the video captions.
+// Resolves to the card, or null if the sentence was already mined; throws on other errors.
+async function mineRange(range, target) {
+  const body = { line_index: range.from, line_end: range.to };
+  if (target && target.line >= range.from && target.line <= range.to) {
+    body.target_line = target.line;
+    body.target_text = target.text;
+    if (target.index !== undefined) body.target_index = target.index;
+    else body.target_offset = target.offset;
+  }
+  let card;
+  try {
+    card = await api("/api/mine", { method: "POST", body });
+  } catch (e) {
+    if (e.status === 409) { markMined(range); return null; }
+    throw e;
+  }
+  state.cards.unshift(card);
+  renderCards();
+  markMined(range);
+  state.lastMined = { range, at: Date.now() };
+  state.span = null;
+  clearTarget();
+  refreshVocab(); // the word is now "mined" on the captions
+  return card;
+}
+
 async function mine() {
   const range = rangeToMine();
   if (!range) { toast("Nothing to mine yet. Start the video, or click a line."); return; }
-  const body = { line_index: range.from, line_end: range.to };
-  if (state.target && state.target.idx >= range.from && state.target.idx <= range.to) {
-    body.target_line = state.target.idx;
-    body.target_index = state.target.ti;
-    body.target_text = state.target.text;
-  }
+  const t = state.target;
   toast("Mining…");
   try {
-    const card = await api("/api/mine", { method: "POST", body });
-    state.cards.unshift(card);
-    renderCards();
-    markMined(range);
-    state.lastMined = { range, at: Date.now() };
-    state.span = null;
-    clearTarget();
-    toast(`Mined: ${card.sentence}`);
+    const card = await mineRange(range, t ? { line: t.idx, text: t.text, index: t.ti } : null);
+    toast(card ? `Mined: ${card.sentence}` : "Already mined.");
   } catch (e) {
-    if (e.status === 409) { markMined(range); toast("Already mined."); }
-    else toast(e.message, true);
+    toast(e.message, true);
   }
 }
 
@@ -440,6 +490,7 @@ window.addEventListener("keydown", (event) => {
   const handlers = {
     m: () => { if (!event.repeat) mine(); },
     r: replay,
+    f: toggleFullscreen,
     " ": togglePlay,
     ArrowLeft: () => (shift ? extendSpan(-1) : stepLine(-1)),
     ArrowRight: () => (shift ? extendSpan(1) : stepLine(1)),
@@ -631,6 +682,9 @@ $("load-form").addEventListener("submit", async (e) => {
     clearTarget();
     renderTranscript();
     setAutoScroll(true);
+    overlay.setLines(state.lines);
+    overlay.setAutoSource(/auto/i.test(data.zh_source));
+    refreshVocab();
     state.statusBase =
       `${data.title}: ${data.lines.length} lines. Chinese from ${data.zh_source}; ` +
       `English: ${data.en_source || "not available"}.` +
@@ -693,3 +747,76 @@ async function init() {
   refreshCards();
 }
 init();
+
+// ---------------------------------------------------------------- caption overlay
+
+// Words already mined or marked known, for the "mined" marks and the status colours.
+state.vocab = { mined: new Set(), known: new Set() };
+
+async function refreshVocab() {
+  try {
+    const v = await api("/api/vocab");
+    state.vocab = { mined: new Set(v.mined), known: new Set(v.known) };
+    overlay.refresh();
+  } catch (e) { /* the colours just stay as they were */ }
+}
+
+function wordStatus(text) {
+  if (state.vocab.known.has(text)) return "known";
+  if (state.vocab.mined.has(text)) return "mined";
+  return "new";
+}
+
+function overlayOptions() {
+  try { return JSON.parse(recall("ytmine.overlay") || "{}"); } catch (e) { return {}; }
+}
+
+function playerState() {
+  const player = activePlayer();
+  if (!player) return null;
+  try { return player.getPlayerState(); } catch (e) { return null; }
+}
+
+const overlay = YtmineOverlay.create({
+  root: $("overlay-root"),
+  options: overlayOptions(),
+  currentIndex: () => state.currentIdx,
+  getRange: () => state.span,
+  getTime: () => {
+    const player = activePlayer();
+    try { return player ? player.getCurrentTime() : null; } catch (e) { return null; }
+  },
+  // 1 = playing, 2 = paused. Anything else (buffering, ended, not started) counts as unknown.
+  isPlaying: () => { const st = playerState(); return st === 1 ? true : st === 2 ? false : null; },
+  pause: () => activePlayer()?.pauseVideo(),
+  play: () => activePlayer()?.playVideo(),
+  lookup: (q) => api(`/api/lookup?q=${encodeURIComponent(q)}`),
+  mine: async ({ from, to, target }) => {
+    const card = await mineRange({ from, to }, target);
+    return card ? { card } : { duplicate: true };
+  },
+  extend: () => {
+    const base = state.span ? state.span.from : state.currentIdx;
+    if (base < 0) return;
+    extendSpan(1, base);
+    const r = state.span;
+    if (r) toast(`The card covers lines ${r.from + 1} to ${r.to + 1}. Click a word, or +, to mine it.`);
+  },
+  fixLine: (i, text) => api(`/api/lines/${i}`, { method: "PATCH", body: { text } }),
+  onLineFixed: (i, line) => {
+    state.lines[i] = line;
+    const top = $("transcript").scrollTop;
+    renderTranscript();
+    $("transcript").scrollTop = top;
+  },
+  setKnown: async (text, known) => {
+    const v = await api("/api/known", { method: "POST", body: { word: text, known } });
+    state.vocab = { mined: new Set(v.mined), known: new Set(v.known) };
+  },
+  // The YouTube iframe swallows pointer events. While a popup is open, let them through to
+  // the page so it can see the pointer leave the word.
+  setShield: (on) => $("stage").classList.toggle("shield", on),
+  getStatus: wordStatus,
+  onOptions: (o) => store("ytmine.overlay", JSON.stringify(o)),
+  extraButtons: [{ label: "⛶", title: "Fullscreen (F)", onClick: toggleFullscreen }],
+});

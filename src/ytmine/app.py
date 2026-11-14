@@ -23,6 +23,7 @@ from ytmine.deps import ffmpeg_install_help, find_ffmpeg
 from ytmine.fetch import FetchError, VideoData, download_audio, fetch_video, watch_url
 from ytmine.history import History
 from ytmine.lang import get_language
+from ytmine.store import CaptionFixes, KnownWords, line_key
 from ytmine.subtitles import (
     Line,
     align_translation,
@@ -57,6 +58,7 @@ class CurrentVideo:
     audio_ready: threading.Event = field(default_factory=threading.Event)
     audio_path: Path | None = None
     audio_error: str | None = None
+    originals: dict[int, str] = field(default_factory=dict)  # line index -> caption as downloaded
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> Flask:
@@ -66,6 +68,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     lang = get_language(settings.language)
     lang.setup(settings.cache_dir)  # starts loading the dictionary in the background
     history = History(settings.history_path)
+    fixes = CaptionFixes(settings.fixes_path)
+    known = KnownWords(settings.known_path)
     session_id = uuid.uuid4().hex[:12]
     current: dict[str, CurrentVideo | None] = {"video": None}
 
@@ -120,7 +124,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         return "word"
 
     def line_view(line: Line, index: int, covered: list[tuple[float, float]] = ()) -> dict:
+        video = current["video"]
         return {
+            "edited": video is not None and index in video.originals,
             "index": index,
             "start": round(line.start, 3),
             "end": round(line.end, 3),
@@ -215,6 +221,13 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             (c["start"], c["end"]) for c in history.cards() if c.get("video_id") == data.video_id
         ]
         video = CurrentVideo(data=data, lines=lines)
+        # Re-apply corrections the user made to this video's captions earlier.
+        saved = fixes.for_video(data.video_id)
+        for i, line in enumerate(lines):
+            fixed = saved.get(line_key(line.start))
+            if fixed and fixed != line.text:
+                video.originals[i] = line.text
+                line.text = fixed
         current["video"] = video
         threading.Thread(target=fetch_audio_in_background, args=(video,), daemon=True).start()
 
@@ -290,10 +303,14 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             token_index = body.get("target_index")
             offset = None
             if isinstance(target_line, int) and index <= target_line <= last:
+                line_text = video.lines[target_line].text
                 if isinstance(token_index, int):
-                    offset = lang.token_offset(
-                        video.lines[target_line].text, token_index, body["target_text"]
-                    )
+                    offset = lang.token_offset(line_text, token_index, body["target_text"])
+                elif isinstance(body.get("target_offset"), int):
+                    # An expression span (an idiom, or a saying with punctuation in it).
+                    given, text = body["target_offset"], body["target_text"]
+                    if given >= 0 and line_text[given : given + len(text)] == text:
+                        offset = given
             if offset is None:
                 return error("The selected word does not match this line.")
             target = body["target_text"]
@@ -400,6 +417,65 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         if not path.is_file():
             abort(404)
         return send_file(path, mimetype="audio/mpeg")
+
+    # -- caption fixes -----------------------------------------------------
+
+    @app.patch("/api/lines/<int:index>")
+    def fix_line(index: int):
+        """Correct the text of one caption line. Auto-captions often get words wrong."""
+        video = current["video"]
+        if video is None or not 0 <= index < len(video.lines):
+            return error("Unknown line.", 404)
+        text = (request.get_json(silent=True) or {}).get("text")
+        if not isinstance(text, str) or not text.strip():
+            return error("The caption cannot be empty.")
+        text = " ".join(text.split())
+        if len(text) > 300:
+            return error("That caption is too long (300 characters at most).")
+        line = video.lines[index]
+        original = video.originals.get(index, line.text)
+        key = line_key(line.start)
+        if text == original:  # changed back: forget the fix
+            video.originals.pop(index, None)
+            fixes.clear(video.data.video_id, key)
+        else:
+            video.originals[index] = original
+            fixes.set(video.data.video_id, key, text)
+        line.text = text
+        return jsonify(line_view(line, index))
+
+    # -- mined and known words ---------------------------------------------
+
+    def word_forms(word: str) -> set[str]:
+        """The word as written plus its simplified and traditional spellings."""
+        forms = {word}
+        for entry in lang.lookup(word):
+            forms |= {entry.headword, entry.alt_form} - {""}
+        return forms
+
+    def vocab_view() -> dict:
+        mined: set[str] = set()
+        for card in history.cards():
+            target = card.get("target")
+            if not target:
+                continue
+            mined.add(target)
+            for entry in card.get("target_entries") or []:
+                mined |= {entry["headword"], entry["alt_form"]} - {""}
+        return {"mined": sorted(mined), "known": sorted(known.all())}
+
+    @app.get("/api/vocab")
+    def get_vocab():
+        return jsonify(vocab_view())
+
+    @app.post("/api/known")
+    def set_known():
+        body = request.get_json(silent=True) or {}
+        word = body.get("word")
+        if not isinstance(word, str) or not word.strip() or len(word) > 60:
+            return error("Give the word to mark.")
+        known.update(word_forms(word.strip()), bool(body.get("known", True)))
+        return jsonify(vocab_view())
 
     # -- settings ----------------------------------------------------------
 

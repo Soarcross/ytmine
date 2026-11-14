@@ -222,3 +222,10 @@ def test_lines_of_a_multi_line_card_show_as_mined_after_reload(client):
     load(client)
     client.post("/api/mine", json={"line_index": 0, "line_end": 1})
     assert [line["mined"] for line in load(client)["lines"]] == [True, True]
+
+
+def test_overlay_script_is_served_and_the_page_loads_it_before_app_js(client):
+    page = client.get("/").get_data(as_text=True)
+    assert page.index("/static/overlay.js") < page.index("/static/app.js")
+    assert 'id="stage"' in page and 'id="overlay-root"' in page
+    assert client.get("/static/overlay.js").status_code == 200

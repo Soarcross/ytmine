@@ -20,6 +20,18 @@ _TO_LATIN = str.maketrans("，。！？、；：（）“”‘’「」『』",
 _SPACE_AFTER_MARK = re.compile(r"([,.!?;:])(?=[^\W\d_])")
 
 
+def _worth_reporting(entries, length: int, crosses_punctuation: bool) -> bool:
+    """Keep matches a learner would want as one unit, and drop accidental ones.
+
+    Idioms and sayings always count. A plain two-character headword is usually just two
+    ordinary words side by side ("我去", or "多,大" across a comma), so plain words need
+    three characters, and four if the match runs across punctuation.
+    """
+    if crosses_punctuation and length < 4:
+        return False
+    return length >= 3 or any(e.kind != "word" for e in entries)
+
+
 class Chinese(Language):
     code = "zh"
     name = "Mandarin Chinese"
@@ -67,7 +79,7 @@ class Chinese(Language):
             if dictionary.wait():
                 jieba = self._load_jieba()
                 with self._lock:
-                    self._feed_jieba(jieba, dictionary)
+                    self._feed_jieba(jieba.dt, dictionary)
         except Exception:  # noqa: BLE001 - segmentation still works without the extra words
             log.exception("could not add dictionary words to jieba")
         finally:
@@ -75,13 +87,18 @@ class Chinese(Language):
                 self._prepared.set()
 
     @staticmethod
-    def _feed_jieba(jieba, dictionary: Dictionary) -> None:
-        known = jieba.dt.FREQ
+    def _feed_jieba(tokenizer, dictionary: Dictionary) -> None:
+        """Add CEDICT's multi-character headwords to a jieba tokenizer (`jieba.dt`)."""
+        # jieba loads its own dictionary lazily, and loading replaces `FREQ` with a new dict.
+        # Initialize first, or "words jieba already knows" looks empty and every word we add
+        # would overwrite jieba's real frequency with ours.
+        tokenizer.initialize()
+        known = tokenizer.FREQ
         for word, kind in dictionary.multi_char_headwords():
-            # Only add what jieba lacks. A tiny frequency is enough: a whole idiom beats
-            # any split into pieces, because the pieces' probabilities multiply.
+            # Only add what jieba lacks. A tiny frequency is enough for a rare idiom: a whole
+            # idiom beats any split into pieces, because the pieces' probabilities multiply.
             if word not in known:
-                jieba.add_word(word, freq=3 if kind != "word" else 1)
+                tokenizer.add_word(word, freq=3 if kind != "word" else 1)
 
     def wait_ready(self, timeout: float) -> bool:
         """Wait for the dictionary to finish loading (or fail). True if it is usable."""
@@ -128,7 +145,8 @@ class Chinese(Language):
                 # A hit that is already a single jieba token is just a word, not an expression.
                 if any(start < b < end for b in boundaries):
                     entries = tuple(dictionary.lookup(flat[n : n + length]))
-                    spans.append(Span(start, end, text[start:end], entries))
+                    if _worth_reporting(entries, length, crosses_punctuation=end - start > length):
+                        spans.append(Span(start, end, text[start:end], entries))
                 break
         return spans
 
