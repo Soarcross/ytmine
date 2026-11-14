@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local Claude Code notes
+CLAUDE.md
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Anything ytmine might write if run from the repo with a local data dir.
+# Mined history, audio clips and exports belong in the per-user data directory.
+mined_history*.json
+*.apkg
+*.mp3
+*.vtt
+!tests/fixtures/*.vtt

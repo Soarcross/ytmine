@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ytmine</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>ytmine</h1>
+    <form id="load-form">
+      <input id="url" type="text" placeholder="Paste a YouTube URL" autocomplete="off" required>
+      <button id="load-btn" type="submit">Load</button>
+    </form>
+    <label class="toggle"><input type="checkbox" id="pinyin-toggle"> Pinyin</label>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <main>
+    <section id="left">
+      <div id="player-wrap">
+        <div id="player"></div>
+        <div id="local-player" hidden>
+          <p id="local-note"></p>
+          <audio id="local-audio" controls preload="auto"></audio>
+        </div>
+      </div>
+      <div id="status">Paste a YouTube video that has Chinese subtitles, then press Load.</div>
+
+      <section id="cards-panel">
+        <div class="panel-head">
+          <h2>Mined cards <span id="card-count">0</span></h2>
+          <label class="toggle small"><input type="checkbox" id="all-sessions"> include earlier sessions</label>
+        </div>
+        <div class="actions">
+          <button id="export-btn">Download .apkg</button>
+          <button id="anki-btn">Send to Anki</button>
+        </div>
+        <ul id="cards"></ul>
+      </section>
+    </section>
+
+    <section id="transcript-wrap">
+      <div id="transcript" tabindex="-1">
+        <p class="empty">The transcript will appear here.</p>
+      </div>
+      <button id="resume-scroll" hidden>Resume auto-scroll</button>
+    </section>
+  </main>
+
+  <footer>
+    <kbd>M</kbd> mine &nbsp; <kbd>R</kbd> replay &nbsp; <kbd>Space</kbd> play/pause &nbsp;
+    <kbd>←</kbd> <kbd>→</kbd> previous/next line &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd>/<kbd>→</kbd> add lines to the card &nbsp;
+    click a line to seek, click a word to blank it
+  </footer>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
