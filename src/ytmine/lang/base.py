@@ -8,6 +8,8 @@ and register the class in `ytmine/lang/__init__.py`. Everything else
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import NamedTuple
 
 
@@ -15,6 +17,31 @@ class ClozeParts(NamedTuple):
     before: str
     target: str
     after: str
+
+
+@dataclass(frozen=True)
+class Entry:
+    """One dictionary entry."""
+
+    headword: str  # as written in the language's main script (simplified for Chinese)
+    alt_form: str  # the other script's spelling (traditional for Chinese), "" if none
+    reading: str  # pronunciation with tone marks
+    definitions: tuple[str, ...] = field(default_factory=tuple)
+    kind: str = "word"  # word, chengyu, suyu or xiehouyu
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["definitions"] = list(self.definitions)
+        return data
+
+
+class Span(NamedTuple):
+    """A multi-word expression found in a sentence, as character offsets into it."""
+
+    start: int
+    end: int  # exclusive
+    text: str  # exactly text[start:end], punctuation inside included
+    entries: tuple[Entry, ...]
 
 
 class Language(ABC):
@@ -33,6 +60,25 @@ class Language(ABC):
     @abstractmethod
     def reading(self, token: str) -> str:
         """Pronunciation of one token (pinyin for Chinese), or "" if it has none."""
+
+    def setup(self, cache_dir: Path) -> None:  # noqa: B027 - optional hook, not abstract
+        """Called once by the app. Languages with a dictionary start loading it here."""
+
+    def wait_ready(self, timeout: float) -> bool:
+        """Wait up to `timeout` seconds for the dictionary. True if it is usable."""
+        return False
+
+    def lookup(self, word: str) -> list[Entry]:
+        """Dictionary entries for `word`. Languages without a dictionary return []."""
+        return []
+
+    def expressions(self, text: str) -> list[Span]:
+        """Idioms and set phrases in `text` that span more than one token."""
+        return []
+
+    def dictionary_status(self) -> dict:
+        """{"state": "ready" | "loading" | "unavailable" | "none", "error": str | None}."""
+        return {"state": "none", "error": None}
 
     def is_word(self, token: str) -> bool:
         """True if the token can be picked as a cloze target."""

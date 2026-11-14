@@ -35,6 +35,7 @@ from ytmine.subtitles import (
 log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 AUDIO_WAIT_SECONDS = 120
+DICTIONARY_WAIT_SECONDS = 30  # how long /api/load waits for a first-run dictionary download
 MAX_SPAN_LINES = 6  # a card can cover at most this many transcript lines
 MAX_SPAN_SECONDS = 30.0
 
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     settings.ensure_dirs()
     services = services or Services()
     lang = get_language(settings.language)
+    lang.setup(settings.cache_dir)  # starts loading the dictionary in the background
     history = History(settings.history_path)
     session_id = uuid.uuid4().hex[:12]
     current: dict[str, CurrentVideo | None] = {"video": None}
@@ -98,6 +100,14 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             "parts": parts._asdict() if parts else None,
         }
 
+    def top_kind(entries) -> str:
+        """The most idiom-like kind among a span's entries (chengyu > suyu > xiehouyu > word)."""
+        kinds = {e.kind for e in entries}
+        for kind in ("chengyu", "suyu", "xiehouyu"):
+            if kind in kinds:
+                return kind
+        return "word"
+
     def line_view(line: Line, index: int, covered: list[tuple[float, float]] = ()) -> dict:
         return {
             "index": index,
@@ -107,6 +117,10 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             "english": line.english,
             "tokens": [
                 [tok, lang.reading(tok), lang.is_word(tok)] for tok in lang.segment(line.text)
+            ],
+            "expressions": [
+                {"start": s.start, "end": s.end, "text": s.text, "kind": top_kind(s.entries)}
+                for s in lang.expressions(line.text)
             ],
             "mined": history.has_sentence(line.text)
             or any(start - 0.01 <= line.start and line.end <= end + 0.01 for start, end in covered),
@@ -144,6 +158,21 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             ffmpeg_help=None if ffmpeg else ffmpeg_install_help(),
             session_id=session_id,
             deck_name=settings.deck_name,
+            dictionary=lang.dictionary_status(),
+        )
+
+    @app.get("/api/lookup")
+    def lookup():
+        """Dictionary entries for a word or expression: reading, definitions, kind, other script."""
+        query = request.args.get("q", "").strip()
+        if not query or len(query) > 60:
+            return error("Give a word or phrase in ?q=.")
+        status = lang.dictionary_status()
+        entries = lang.lookup(query)
+        return jsonify(
+            query=query,
+            entries=[e.to_dict() for e in entries],
+            dictionary=status,
         )
 
     # -- loading a video ---------------------------------------------------
@@ -158,6 +187,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         except FetchError as exc:
             return error(exc.message, exc.status, exc.hint)
 
+        # The first run downloads the dictionary. Segmentation depends on it, so give it a moment.
+        lang.wait_ready(DICTIONARY_WAIT_SECONDS)
         cues = parse_vtt(data.zh_vtt)
         unpunctuated = is_unpunctuated(clean_cues(cues, merge=False))
         lines = clean_cues(
@@ -183,6 +214,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             zh_source=data.zh_source,
             en_source=data.en_source,
             unpunctuated=unpunctuated,
+            dictionary=lang.dictionary_status(),
             lines=[line_view(line, i, covered) for i, line in enumerate(lines)],
         )
 

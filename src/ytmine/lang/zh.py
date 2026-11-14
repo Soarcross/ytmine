@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from pathlib import Path
 
-from ytmine.lang.base import Language
+from ytmine.lang.base import Entry, Language, Span
+from ytmine.lang.cedict import Dictionary
 
+log = logging.getLogger(__name__)
 _CJK_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 # No space before closing punctuation or after opening punctuation in pinyin output.
 _NO_SPACE_BEFORE = re.compile(r"\s+([，。！？、；：,.!?;:）)”’」』])")
@@ -36,6 +39,98 @@ class Chinese(Language):
     def __init__(self) -> None:
         self._jieba = None
         self._lock = threading.Lock()
+        self._dictionary: Dictionary | None = None
+        self._prepared = threading.Event()  # set once the dictionary has been given to jieba
+        self._prepared.set()
+
+    # -- dictionary --------------------------------------------------------
+
+    def setup(self, cache_dir: Path) -> None:
+        self.use_dictionary(Dictionary(cache_dir))
+
+    def use_dictionary(self, dictionary: Dictionary | None) -> None:
+        """Attach CC-CEDICT and start loading it, and feeding its words to jieba, in the background.
+
+        Words are added to jieba once. After that the segmentation of a given sentence does
+        not change, so token indexes the page already holds stay valid.
+        """
+        self._dictionary = dictionary
+        if dictionary is None:
+            self._prepared.set()
+            return
+        self._prepared.clear()
+        dictionary.start()
+        threading.Thread(target=self._prepare, args=(dictionary,), daemon=True).start()
+
+    def _prepare(self, dictionary: Dictionary) -> None:
+        try:
+            if dictionary.wait():
+                jieba = self._load_jieba()
+                with self._lock:
+                    self._feed_jieba(jieba, dictionary)
+        except Exception:  # noqa: BLE001 - segmentation still works without the extra words
+            log.exception("could not add dictionary words to jieba")
+        finally:
+            if dictionary is self._dictionary:
+                self._prepared.set()
+
+    @staticmethod
+    def _feed_jieba(jieba, dictionary: Dictionary) -> None:
+        known = jieba.dt.FREQ
+        for word, kind in dictionary.multi_char_headwords():
+            # Only add what jieba lacks. A tiny frequency is enough: a whole idiom beats
+            # any split into pieces, because the pieces' probabilities multiply.
+            if word not in known:
+                jieba.add_word(word, freq=3 if kind != "word" else 1)
+
+    def wait_ready(self, timeout: float) -> bool:
+        """Wait for the dictionary to finish loading (or fail). True if it is usable."""
+        self._prepared.wait(timeout)
+        return (
+            self._dictionary is not None and self._dictionary.is_ready and self._prepared.is_set()
+        )
+
+    def dictionary_status(self) -> dict:
+        if self._dictionary is None:
+            return super().dictionary_status()
+        return self._dictionary.status()
+
+    def lookup(self, word: str) -> list[Entry]:
+        if self._dictionary is None or not self._dictionary.is_ready:
+            return []
+        return self._dictionary.lookup(word)
+
+    def expressions(self, text: str) -> list[Span]:
+        """Dictionary entries spanning two or more jieba tokens (idioms, sayings, set phrases).
+
+        Punctuation inside a match is ignored, so a saying with a comma in it still hits.
+        Each start position keeps only its longest match; matches may overlap each other.
+        """
+        dictionary = self._dictionary
+        if dictionary is None or not dictionary.is_ready or not text:
+            return []
+        # Normalized characters, each remembering where it sits in the original text.
+        chars = [(i, ch.lower()) for i, ch in enumerate(text) if ch.isalnum()]
+        flat = "".join(ch for _, ch in chars)
+        tokens = self.segment(text)
+        boundaries, pos = set(), 0
+        for tok in tokens:
+            boundaries.add(pos)
+            pos += len(tok)
+        boundaries.add(len(text))
+
+        spans = []
+        for n in range(len(chars)):
+            for length in range(min(dictionary.max_length, len(chars) - n), 1, -1):
+                if not dictionary.has_key(flat[n : n + length]):
+                    continue
+                start, end = chars[n][0], chars[n + length - 1][0] + 1
+                # A hit that is already a single jieba token is just a word, not an expression.
+                if any(start < b < end for b in boundaries):
+                    entries = tuple(dictionary.lookup(flat[n : n + length]))
+                    spans.append(Span(start, end, text[start:end], entries))
+                break
+        return spans
 
     def _load_jieba(self):
         # jieba builds its dictionary on first use (about a second), so do it lazily.

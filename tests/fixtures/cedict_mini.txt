@@ -1,0 +1,13 @@
+# Hand-written test data in CC-CEDICT's format (not taken from the real file).
+#! charset=UTF-8
+學習 学习 [xue2 xi2] /to study; to learn/
+行 行 [xing2] /to walk; to go; OK/
+行 行 [hang2] /row; line; profession/
+一舉兩得 一举两得 [yi1 ju3 liang3 de2] /(lit.) one action, two gains (idiom)/(fig.) two birds with one stone/
+三個臭皮匠，頂個諸葛亮 三个臭皮匠，顶个诸葛亮 [san1 ge4 chou4 pi2 jiang5 , ding3 ge4 Zhu1 ge3 Liang4] /three cobblers beat one genius (saying)/
+一席話 一席话 [yi1 xi2 hua4] /a conversation; remarks/
+一夕 一夕 [yi1 xi1] /overnight; very quickly/
+臺灣 台湾 [Tai2 wan1] /Taiwan/
+女 女 [nu:3] /female; woman/
+我們 我们 [wo3 men5] /we; us/
+好 好 [hao3] /good/

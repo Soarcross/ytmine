@@ -9,6 +9,7 @@ It runs on your own computer. There is no account, no server, no tracking and no
 - Plays the video in the page with the YouTube player and shows the Chinese subtitles beside it. The current line is highlighted and scrolls into view.
 - Mines a line with one keypress. ytmine cuts a short mp3 clip, adds pinyin, and attaches the English line when the video has English subtitles.
 - Lets you click any word to blank it out (a cloze card), with word boundaries from jieba.
+- Looks words up in the CC-CEDICT dictionary (pinyin, definitions, simplified and traditional forms) and recognises idioms (chengyu) and sayings, so 一举两得 stays one unit and a saying with a comma in it is found as a whole. Without the dictionary everything else still works.
 - Cleans up messy subtitles: removes the repeated text in auto-captions, strips tags and sound cues like [音乐], and joins sentences that were split across cues.
 - Exports an Anki `.apkg` file with the audio included, or sends the cards straight to a running Anki through AnkiConnect.
 - Remembers what you have mined in a history file, so the same sentence is never mined twice.
@@ -128,7 +129,7 @@ The card front shows the sentence (with the blank if you picked a word) and play
 | --- | --- |
 | Mined history and cards | `mined_history.json` in your user data directory |
 | Audio clips, exported decks | `media/` and `exports/` in the same directory |
-| Downloaded audio and subtitles | your user cache directory (`ytmine --clear-cache` deletes it) |
+| Downloaded audio, subtitles and the dictionary | your user cache directory (`ytmine --clear-cache` deletes it) |
 | Optional settings | `config.json` in your user config directory |
 
 The exact directories are chosen by [platformdirs](https://pypi.org/project/platformdirs/). ytmine prints the data directory when it starts. You can override the locations with the `YTMINE_DATA_DIR` and `YTMINE_CACHE_DIR` environment variables.
@@ -157,7 +158,7 @@ Why does a card's audio start or end a little off?
 Subtitle timing is only as good as the uploader made it. Auto-captions are looser than manual ones. Raise `padding` in `config.json` if clips cut off too early.
 
 The Chinese came from auto-captions and has mistakes. What now?
-Auto-caption text is machine generated. Use the Edit button in the card panel to fix a card before exporting.
+Auto-caption text is machine generated, and it does get words wrong: it can turn 一席崩塌 into 一夕, for example. Dictionary lookups and idiom detection work on the text as captioned, so a wrong word gives a wrong lookup. Use the Edit button in the card panel to fix a card before exporting.
 
 Do I need to click on the page for the hotkeys to work?
 Hotkeys work whenever the page has focus. If you click inside the video, ytmine takes focus back so the keys keep working. Typing in a text field disables the hotkeys while you type.
@@ -175,7 +176,7 @@ Does it work for other languages?
 Not yet. Word segmentation, pinyin and cloze live in `src/ytmine/lang/`, behind a small interface, so adding a language is a contained change. See CONTRIBUTING.md.
 
 What does it send over the network?
-Only two things. yt-dlp talks to YouTube to fetch subtitles and audio, and your browser loads the YouTube player (from youtube-nocookie.com) to play the video. The optional Send to Anki button talks to AnkiConnect on localhost. There is no analytics, telemetry or update check. The server only listens on 127.0.0.1 and rejects requests from other websites.
+Three things. yt-dlp talks to YouTube to fetch subtitles and audio, and your browser loads the YouTube player (from youtube-nocookie.com) to play the video. The first time you run ytmine it also downloads the CC-CEDICT dictionary (about 4 MB) from mdbg.net into your cache directory. It is kept there and re-checked about every three months. If the download fails, ytmine works without definitions and tries again later. The optional Send to Anki button talks to AnkiConnect on localhost. There is no analytics, telemetry or update check. The server only listens on 127.0.0.1 and rejects requests from other websites.
 
 ## Personal study use only
 
@@ -199,3 +200,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and how to add a l
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Dictionary data comes from [CC-CEDICT](https://cc-cedict.org/) (distributed by MDBG), which is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). ytmine downloads it at run time and does not include it in this repository.

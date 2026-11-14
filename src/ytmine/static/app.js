@@ -612,6 +612,10 @@ $("load-form").addEventListener("submit", async (e) => {
       (data.unpunctuated
         ? " These subtitles have no punctuation, so ytmine joined fragments into sentences. " +
           "If a card still cuts a sentence, use Shift+←/→ to add lines."
+        : "") +
+      (data.dictionary && data.dictionary.state !== "ready"
+        ? " The dictionary is not available (it downloads once, then works offline), " +
+          "so there are no definitions or idiom highlights."
         : "");
     state.audioState = "downloading";
     pollAudio();
