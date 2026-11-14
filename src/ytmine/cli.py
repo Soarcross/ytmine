@@ -76,6 +76,39 @@ def _stop(settings: Settings, port: int) -> int:
     return 1
 
 
+def _shortcut(create: bool) -> int:
+    from ytmine import launcher
+
+    try:
+        paths = launcher.create_shortcut() if create else launcher.remove_shortcut()
+    except (launcher.LauncherError, OSError) as exc:
+        print(f"Could not {'add' if create else 'remove'} the shortcut: {exc}", file=sys.stderr)
+        return 1
+    if not create:
+        print("Removed " + ", ".join(map(str, paths)) if paths else "There was no shortcut.")
+        return 0
+    print("Added a ytmine shortcut:")
+    for path in paths:
+        print(f"  {path}")
+    print(
+        "Click it to start ytmine. It runs in the background with no window and opens its page.\n"
+        "Clicking it again while ytmine runs just opens the page. To stop ytmine: ytmine --stop"
+    )
+    return 0
+
+
+def _shortcut_tip() -> str:
+    """One line suggesting the shortcut, shown at start-up in a terminal until one exists."""
+    from ytmine import launcher
+
+    try:
+        if launcher.shortcut_exists():
+            return ""
+    except OSError:
+        return ""
+    return "Tip: run `ytmine --create-shortcut` to start ytmine with a click next time."
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ytmine", description="Sentence-mine Mandarin from YouTube videos into Anki."
@@ -93,6 +126,15 @@ def main(argv: list[str] | None = None) -> int:
         help="print the browser extension pairing token, then exit",
     )
     parser.add_argument("--stop", action="store_true", help="stop the ytmine that is running")
+    parser.add_argument(
+        "--create-shortcut",
+        action="store_true",
+        help="add a ytmine icon to the desktop and Start menu (Applications on macOS, "
+        "the app menu on Linux) that starts ytmine without a terminal",
+    )
+    parser.add_argument(
+        "--remove-shortcut", action="store_true", help="remove the icon --create-shortcut added"
+    )
     parser.add_argument(
         "--background",
         action="store_true",
@@ -122,6 +164,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.stop:
         return _stop(settings, args.port or DEFAULT_PORT)
+
+    if args.create_shortcut or args.remove_shortcut:
+        return _shortcut(create=args.create_shortcut)
 
     # Started twice (say, from the shortcut while it already runs from login): open the running one.
     running = instance.find_running(args.port or DEFAULT_PORT)
@@ -158,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     print("The browser extension connects by itself while the ytmine page is open.")
     print(f"(Manual pairing token, if you ever need it: {app.config['PAIRING_TOKEN']})")
     print("Press Ctrl+C to stop, or run: ytmine --stop")
+    if not args.background and sys.stdout.isatty() and (tip := _shortcut_tip()):
+        print(tip)
     if not args.no_browser:
         threading.Timer(0.8, webbrowser.open, args=(url,)).start()
     instance.record(port)
