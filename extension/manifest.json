@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "ytmine",
+  "version": "0.1.0",
+  "description": "Mine Mandarin from YouTube into Anki. Shows ytmine's captions on youtube.com, with a hover dictionary and click to mine. Needs the ytmine program running on this computer.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["shared.js", "overlay.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "ytmine",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ytmine@example.invalid",
+      "strict_min_version": "121.0"
+    }
+  }
+}

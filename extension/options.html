@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ytmine options</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 15px/1.5 system-ui, "Segoe UI", sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 16px; margin-top: 28px; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; }
+    input[type="text"], input[type="password"] { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row input { flex: 1; }
+    .keys { display: grid; grid-template-columns: 1fr 140px; gap: 6px 12px; align-items: center; }
+    .keys input { text-align: center; }
+    .hint { color: GrayText; font-size: 13px; margin: 4px 0; }
+    button { font: inherit; padding: 5px 12px; cursor: pointer; }
+    #result { margin-top: 8px; min-height: 1.5em; }
+    .ok { color: #15803d; } .bad { color: #b91c1c; }
+    code { background: rgba(127, 127, 127, 0.2); padding: 0 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>ytmine</h1>
+  <p class="hint">This extension shows ytmine's captions on youtube.com. The ytmine program must be running on this computer.</p>
+
+  <h2>Connection</h2>
+  <label for="server">Server address</label>
+  <input id="server" type="text" autocomplete="off" spellcheck="false">
+  <p class="hint">Leave this as it is unless you started ytmine on another port. It must be on this computer.</p>
+
+  <label for="token">Pairing token</label>
+  <div class="row">
+    <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from ytmine">
+    <button id="show" type="button">Show</button>
+  </div>
+  <p class="hint">ytmine prints the token when it starts. To see it again, run <code>ytmine --show-token</code>. You only need to paste it once.</p>
+  <div class="row"><button id="test" type="button">Save and test</button></div>
+  <div id="result" role="status"></div>
+
+  <h2>Captions</h2>
+  <label><input id="hide" type="checkbox"> Hide YouTube's own captions while ytmine's are showing</label>
+
+  <h2>Hotkeys</h2>
+  <p class="hint">Click a box and press the key you want. They do nothing while you are typing in a text box. YouTube already uses Space, K, J, L, F, M, C and the arrow keys, so those are best avoided. Press Backspace in a box to restore its default.</p>
+  <div class="keys" id="keys"></div>
+
+  <script src="shared.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

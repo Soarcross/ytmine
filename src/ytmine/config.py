@@ -6,6 +6,7 @@ variables override the defaults (handy for tests and portable installs):
 
     YTMINE_DATA_DIR   mined history, audio clips, exported decks
     YTMINE_CACHE_DIR  downloaded subtitles and full audio tracks
+    YTMINE_CONFIG_DIR config.json and the extension pairing token
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ class Settings:
     card_types: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_CARD_TYPES))
     deck_split: str = "none"  # none, channel or video: extra subdecks under Sentences
     config_file: Path | None = None  # where changes made in the web UI are saved
+    token_file: Path | None = None  # the extension pairing token (None: kept in memory only)
 
     @property
     def media_dir(self) -> Path:
@@ -80,6 +82,7 @@ class Settings:
             else platformdirs.user_cache_path(APP_NAME, False),
         )
         settings.config_file = config_path()
+        settings.token_file = config_path().parent / "pairing_token"
         settings._apply_config_file(settings.config_file)
         return settings
 
@@ -127,4 +130,6 @@ class Settings:
 
 
 def config_path() -> Path:
-    return platformdirs.user_config_path(APP_NAME, False) / "config.json"
+    override = os.environ.get("YTMINE_CONFIG_DIR")
+    base = Path(override) if override else platformdirs.user_config_path(APP_NAME, False)
+    return base / "config.json"

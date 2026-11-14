@@ -144,3 +144,18 @@ def test_mark_word_known_and_unknown(client, tmp_path):
     vocab = client.post("/api/known", json={"word": "学习", "known": False}).get_json()
     assert vocab["known"] == []
     assert client.post("/api/known", json={"word": ""}).status_code == 400
+
+
+def test_mine_and_fix_refuse_a_different_video(client):
+    load(client)  # the loaded video is abcdefghijk
+    wrong = {"video_id": "zzzzzzzzzzz"}
+    mined = client.post("/api/mine", json={"line_index": 0, **wrong})
+    assert mined.status_code == 412 and "different video" in mined.get_json()["error"]
+    fixed = client.patch("/api/lines/0", json={"text": "别的", **wrong})
+    assert fixed.status_code == 412
+    # Naming the right video, or none at all, works as before.
+    assert (
+        client.post("/api/mine", json={"line_index": 0, "video_id": "abcdefghijk"}).status_code
+        == 201
+    )
+    assert client.patch("/api/lines/1", json={"text": "别的字"}).status_code == 200

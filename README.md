@@ -162,9 +162,9 @@ If you used Send to Anki before, those notes were added one by one with random I
 | Audio clips, exported decks | `media/` and `exports/` in the same directory |
 | Downloaded audio, subtitles and the dictionary | your user cache directory (`ytmine --clear-cache` deletes it) |
 | Caption corrections, words marked as known | `caption_fixes.json` and `known_words.json` in your user data directory |
-| Optional settings | `config.json` in your user config directory |
+| Optional settings, extension pairing token | `config.json` and `pairing_token` in your user config directory |
 
-The exact directories are chosen by [platformdirs](https://pypi.org/project/platformdirs/). ytmine prints the data directory when it starts. You can override the locations with the `YTMINE_DATA_DIR` and `YTMINE_CACHE_DIR` environment variables.
+The exact directories are chosen by [platformdirs](https://pypi.org/project/platformdirs/). ytmine prints the data directory when it starts. You can override the locations with the `YTMINE_DATA_DIR`, `YTMINE_CACHE_DIR` and `YTMINE_CONFIG_DIR` environment variables.
 
 `config.json` accepts these keys, all optional:
 
@@ -184,6 +184,55 @@ The exact directories are chosen by [platformdirs](https://pypi.org/project/plat
 ```
 
 `padding` is the number of seconds of audio added before and after each line. `ankiconnect_url` must point at localhost. `deck_split` is `none`, `channel` or `video`. The card settings in the web page write `card_types` and `deck_split` here.
+
+## Browser extension: mine on youtube.com
+
+The extension puts the same captions, hover dictionary and click-to-mine on youtube.com itself, including in YouTube's own fullscreen. It is only the display. The ytmine program on your computer still gets the subtitles, looks words up, cuts the audio and builds the cards, so ytmine has to be running while you watch.
+
+It is not on any extension store. You load it from the `extension` folder of this repository.
+
+### Install in Chrome (and Edge, Brave and other Chromium browsers)
+
+1. Download or clone this repository. You need the `extension` folder.
+2. Open `chrome://extensions`, switch on Developer mode, press Load unpacked and choose the `extension` folder.
+3. Start ytmine. It prints a pairing token. If you missed it, run `ytmine --show-token`.
+4. Open the extension's options page (right-click its icon, then Options). Paste the token into Pairing token and press Save and test. You only do this once.
+5. Open a YouTube video that has Chinese subtitles. The captions appear over the video after a few seconds.
+
+### Install in Firefox
+
+1. Open `about:debugging#/runtime/this-firefox` and press Load Temporary Add-on.
+2. Choose `extension/manifest.json`.
+3. Pair it in the options page as above.
+
+Firefox removes a temporary add-on when it closes, so you repeat step 1 each time. The Firefox version has not been tested yet.
+
+### Using it
+
+It works as the captions on the ytmine page do (see Captions on the video above): hover a word to pause and look it up, click a word to mine it, Shift+click to add the next line, click the pencil to fix a caption. The buttons at the top right of the video turn captions on and off, show pinyin and English, colour words by status, and show or hide YouTube's own captions. By default YouTube's captions are hidden while ytmine's are showing.
+
+The hotkeys use letters YouTube does not use, so they do not fight its own shortcuts:
+
+| Key | Action |
+| --- | --- |
+| Q | Mine the current line. |
+| R | Replay the current line. |
+| A / D | Previous or next line. |
+| E | Add the next line to the card. |
+
+You can change them in the options page. They do nothing while you are typing in a text box. Mining is mostly by click, so you may never need them.
+
+The toolbar icon opens a list of this session's cards, with Edit and Delete, plus Download .apkg and Send to Anki.
+
+If ytmine is not running, the video shows "Start ytmine on your computer". If the token is missing or wrong, it says so and tells you where to paste it.
+
+### What the extension is allowed to do
+
+- It runs only on `https://www.youtube.com/`, and it can talk only to `127.0.0.1` and `localhost`. It asks for the `storage` permission and nothing else.
+- The ytmine server still refuses every web page, youtube.com included. The extension does not call the server from the YouTube page. A background worker in the extension makes the requests, so they come from the extension and not from youtube.com, and they carry the pairing token.
+- The token is a random value made the first time ytmine runs and saved in your config directory (`pairing_token`, next to `config.json`). Anyone who has it and runs an extension on your computer can use ytmine, so treat it like a password. Delete the file and restart ytmine to get a new one.
+- The extension sends the token only to the server address in its options, and refuses an address that is not on your computer.
+- Cards, history and audio stay on your computer, as before. The extension makes no other network requests.
 
 ## FAQ
 
@@ -215,7 +264,7 @@ Does it work for other languages?
 Not yet. Word segmentation, pinyin and cloze live in `src/ytmine/lang/`, behind a small interface, so adding a language is a contained change. See CONTRIBUTING.md.
 
 What does it send over the network?
-Three things. yt-dlp talks to YouTube to fetch subtitles and audio, and your browser loads the YouTube player (from youtube-nocookie.com) to play the video. The first time you run ytmine it also downloads the CC-CEDICT dictionary (about 4 MB) from mdbg.net into your cache directory. It is kept there and re-checked about every three months. If the download fails, ytmine works without definitions and tries again later. The optional Send to Anki button talks to AnkiConnect on localhost. There is no analytics, telemetry or update check. The server only listens on 127.0.0.1 and rejects requests from other websites.
+Three things. yt-dlp talks to YouTube to fetch subtitles and audio, and your browser loads the YouTube player (from youtube-nocookie.com) to play the video. The first time you run ytmine it also downloads the CC-CEDICT dictionary (about 4 MB) from mdbg.net into your cache directory. It is kept there and re-checked about every three months. If the download fails, ytmine works without definitions and tries again later. The optional Send to Anki button talks to AnkiConnect on localhost. There is no analytics, telemetry or update check. The server only listens on 127.0.0.1 and rejects requests from other websites. The one exception is the browser extension you pair with it (see above), which has to present the pairing token.
 
 ## Personal study use only
 

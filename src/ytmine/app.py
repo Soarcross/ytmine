@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 from ytmine import ankiconnect, clips, export
 from ytmine.config import DECK_SPLITS, DEFAULT_CARD_TYPES, Settings
@@ -23,6 +23,7 @@ from ytmine.deps import ffmpeg_install_help, find_ffmpeg
 from ytmine.fetch import FetchError, VideoData, download_audio, fetch_video, watch_url
 from ytmine.history import History
 from ytmine.lang import get_language
+from ytmine.pairing import TOKEN_HEADER, is_extension_origin, load_or_create_token, token_matches
 from ytmine.store import CaptionFixes, KnownWords, line_key
 from ytmine.subtitles import (
     Line,
@@ -74,6 +75,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     current: dict[str, CurrentVideo | None] = {"video": None}
 
     app = Flask(__name__, static_folder=None)
+    pairing_token = load_or_create_token(settings.token_file)
+    app.config["PAIRING_TOKEN"] = pairing_token
 
     # -- protect the local server -----------------------------------------
 
@@ -82,18 +85,75 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         """Reject requests from other websites (DNS rebinding and cross-site POSTs)."""
         if urlsplit("//" + request.host).hostname not in ("localhost", "127.0.0.1", "::1"):
             abort(403)
+        given = request.headers.get(TOKEN_HEADER)
+        has_token = token_matches(given, pairing_token)
+        if given is not None and not has_token:
+            abort(403)  # a token that is present must be right, whatever else the request says
         origin = request.headers.get("Origin")
-        if origin and urlsplit(origin).netloc != request.host:
-            abort(403)
+        if not origin:
+            # Browsers leave Origin off GET requests that are same-origin, plain navigations and
+            # no-cors loads (<img>, <script>), and Chrome leaves it off an extension's GETs too.
+            # The Sec-Fetch headers tell these apart. A request that is clearly from some other
+            # context needs the token; curl-style clients (no Sec-Fetch headers), navigations and
+            # our own page do not.
+            site = request.headers.get("Sec-Fetch-Site")
+            mode = request.headers.get("Sec-Fetch-Mode")
+            outside = (site in ("cross-site", "same-site") and mode != "navigate") or (
+                site == "none" and mode == "cors"
+            )
+            if outside and not has_token:
+                abort(403)
+            return None
+        if urlsplit(origin).netloc == request.host:
+            return None  # our own page
+        # A browser extension is the one other caller. It must be paired: Origin
+        # chrome-extension:// or moz-extension:// plus the token. A web page never qualifies,
+        # whatever it sends, and neither does an extension without the token.
+        if is_extension_origin(origin):
+            if request.method == "OPTIONS":
+                # The browser's preflight cannot carry the token. It gets only CORS headers,
+                # no data, and the real request that follows is checked.
+                request.environ["ytmine.cors_origin"] = origin
+                return Response(status=204)
+            if has_token:
+                request.environ["ytmine.cors_origin"] = origin
+                return None
+        abort(403)
+
+    @app.after_request
+    def allow_paired_extension(response):
+        origin = request.environ.get("ytmine.cors_origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Headers"] = f"Content-Type, {TOKEN_HEADER}"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE"
+            response.headers["Vary"] = "Origin"
+        return response
 
     @app.errorhandler(403)
     def forbidden(_):
-        return jsonify(error="Forbidden: ytmine only answers requests from its own page."), 403
+        return jsonify(
+            error="Forbidden: ytmine only answers requests from its own page "
+            "and from the paired browser extension."
+        ), 403
 
     # -- helpers -----------------------------------------------------------
 
     def error(message: str, status: int = 400, hint: str | None = None):
         return jsonify(error=message, hint=hint), status
+
+    def wrong_video(body: dict):
+        """An error response if the caller means a different video than the one loaded.
+
+        The server keeps one current video. A client that names the video it is showing (the
+        browser extension does) is stopped from mining into whichever video was loaded last.
+        """
+        wanted, video = body.get("video_id"), current["video"]
+        if wanted and video is not None and wanted != video.data.video_id:
+            return error(
+                "ytmine has a different video loaded now (another tab?). Reload this page.", 412
+            )
+        return None
 
     def card_view(card: dict) -> dict:
         parts = lang.cloze(card["sentence"], card.get("target") or "", card.get("target_start"))
@@ -269,6 +329,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         if video is None:
             return error("Load a video first.")
         body = request.get_json(silent=True) or {}
+        if (problem := wrong_video(body)) is not None:
+            return problem
         index = body.get("line_index")
         if not isinstance(index, int) or not 0 <= index < len(video.lines):
             return error("Unknown line.")
@@ -426,7 +488,10 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         video = current["video"]
         if video is None or not 0 <= index < len(video.lines):
             return error("Unknown line.", 404)
-        text = (request.get_json(silent=True) or {}).get("text")
+        body = request.get_json(silent=True) or {}
+        if (problem := wrong_video(body)) is not None:
+            return problem
+        text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             return error("The caption cannot be empty.")
         text = " ".join(text.split())

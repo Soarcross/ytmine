@@ -46,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="delete downloaded audio and subtitles, then exit",
     )
+    parser.add_argument(
+        "--show-token",
+        action="store_true",
+        help="print the browser extension pairing token, then exit",
+    )
     parser.add_argument("--version", action="version", version=f"ytmine {__version__}")
     args = parser.parse_args(argv)
 
@@ -55,6 +60,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.clear_cache:
         shutil.rmtree(settings.cache_dir, ignore_errors=True)
         print(f"Cleared {settings.cache_dir}")
+        return 0
+
+    if args.show_token:
+        from ytmine.pairing import load_or_create_token
+
+        print(load_or_create_token(settings.token_file))
         return 0
 
     if find_ffmpeg() is None:
@@ -72,10 +83,15 @@ def main(argv: list[str] | None = None) -> int:
         print("Could not find a free port. Try: ytmine --port 9000", file=sys.stderr)
         return 1
 
-    server = make_server(host, port, create_app(settings), threaded=True)
+    app = create_app(settings)
+    server = make_server(host, port, app, threaded=True)
     url = f"http://{host}:{port}/"
     print(f"ytmine {__version__} is running at {url}")
     print(f"Your data is stored in {settings.data_dir}")
+    print(f"Browser extension pairing token: {app.config['PAIRING_TOKEN']}")
+    print(
+        "(paste it into the extension's options page once; `ytmine --show-token` prints it again)"
+    )
     print("Press Ctrl+C to stop.")
     if not args.no_browser:
         threading.Timer(0.8, webbrowser.open, args=(url,)).start()
