@@ -27,6 +27,12 @@ def fake_fetch(url, cache_dir):
     return VideoData("abcdefghijk", "Test video", 60.0, ZH, "manual (zh-Hans)", EN, "manual (en)")
 
 
+def fake_probe(url):
+    if "bad" in url:
+        raise FetchError("yt-dlp could not fetch this video: boom")
+    return "english" not in url
+
+
 cut_calls = []
 
 
@@ -47,6 +53,7 @@ def client(tmp_path):
     )
     services = Services(
         fetch_video=fake_fetch,
+        probe_video=fake_probe,
         download_audio=lambda vid, cache: audio,
         cut_clip=fake_cut,
         find_ffmpeg=lambda: "ffmpeg",
@@ -259,3 +266,28 @@ def test_a_failed_send_to_anki_leaves_cards_queued(client):
     client.post("/api/mine", json={"line_index": 0})
     assert client.post("/api/anki/send", json={}).status_code == 502  # Anki is not running
     assert len(client.get("/api/cards").get_json()["cards"]) == 1
+
+
+def test_probe_reports_whether_a_video_is_chinese(client):
+    r = client.post("/api/probe", json={"url": "https://youtu.be/abcdefghijk"})
+    assert r.status_code == 200 and r.get_json() == {"chinese": True}
+    r = client.post("/api/probe", json={"url": "https://youtu.be/english-vid"})
+    assert r.status_code == 200 and r.get_json() == {"chinese": False}
+
+
+def test_probe_passes_fetch_problems_on(client):
+    r = client.post("/api/probe", json={"url": "https://youtu.be/bad"})
+    assert r.status_code == 502 and "boom" in r.get_json()["error"]
+    assert client.post("/api/probe", json={}).status_code == 400
+
+
+def test_load_error_carries_the_not_chinese_code(tmp_path):
+    def english(url, cache_dir):
+        raise FetchError("This video is not in Chinese.", status=422, code="not_chinese")
+
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c"),
+        Services(fetch_video=english, find_ffmpeg=lambda: "ffmpeg"),
+    )
+    r = app.test_client().post("/api/load", json={"url": "https://youtu.be/abcdefghijk"})
+    assert r.status_code == 422 and r.get_json()["code"] == "not_chinese"

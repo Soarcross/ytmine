@@ -83,12 +83,21 @@
     const s = { id, root, lines: [], starts: [], currentIdx: -1, selectedIdx: null, lastChangeAt: -Infinity,
       span: null, vocab: { mined: new Set(), known: new Set() }, ourAction: 0, listeners: [] };
     session = s;
-    showStatus(s, "ytmine: loading the captions… (the first time can take 10 to 30 seconds)");
     settings = await ytmGetSettings();
     if (mySeq !== seq) return;
+    const url = `https://www.youtube.com/watch?v=${id}`;
 
-    const reply = await ytmRequest("/api/load", { method: "POST", body: { url: `https://www.youtube.com/watch?v=${id}` } });
+    // Ask quietly first: on videos that are not in Chinese ytmine shows nothing at all.
+    const probe = await ytmRequest("/api/probe", { method: "POST", body: { url } });
     if (mySeq !== seq) return;
+    if (probe.ok && probe.data && probe.data.chinese === false) return;
+    // Any other answer (Chinese, an old server without /api/probe, an error) goes on to load,
+    // which reports real problems such as ytmine not running.
+
+    showStatus(s, "ytmine: loading the captions… (the first time can take 10 to 30 seconds)");
+    const reply = await ytmRequest("/api/load", { method: "POST", body: { url } });
+    if (mySeq !== seq) return;
+    if (!reply.ok && reply.data && reply.data.code === "not_chinese") { hideStatus(s); return; }
     if (!reply.ok) {
       const message = ytmProblem(reply) || (reply.data && reply.data.error) || "ytmine could not load this video.";
       showStatus(s, `ytmine: ${message}`, { retry: true, openYtmine: ytmNeedsPairing(reply) });

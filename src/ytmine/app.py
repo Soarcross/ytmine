@@ -20,7 +20,14 @@ from flask import Flask, Response, abort, jsonify, request, send_file, send_from
 from ytmine import ankiconnect, clips, export
 from ytmine.config import DECK_SPLITS, DEFAULT_CARD_TYPES, Settings
 from ytmine.deps import ffmpeg_install_help, find_ffmpeg
-from ytmine.fetch import FetchError, VideoData, download_audio, fetch_video, watch_url
+from ytmine.fetch import (
+    FetchError,
+    VideoData,
+    download_audio,
+    fetch_video,
+    probe_video,
+    watch_url,
+)
 from ytmine.history import History
 from ytmine.lang import get_language
 from ytmine.pairing import TOKEN_HEADER, is_extension_origin, load_or_create_token, token_matches
@@ -47,6 +54,7 @@ class Services:
     """The things that touch the outside world, swappable in tests."""
 
     fetch_video: Callable[[str, Path], VideoData] = fetch_video
+    probe_video: Callable[[str], bool] = probe_video
     download_audio: Callable[[str, Path], Path] = download_audio
     cut_clip: Callable[..., None] = clips.cut_clip
     find_ffmpeg: Callable[[], str | None] = find_ffmpeg
@@ -139,8 +147,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     # -- helpers -----------------------------------------------------------
 
-    def error(message: str, status: int = 400, hint: str | None = None):
-        return jsonify(error=message, hint=hint), status
+    def error(message: str, status: int = 400, hint: str | None = None, code: str | None = None):
+        return jsonify(error=message, hint=hint, code=code), status
 
     def wrong_video(body: dict):
         """An error response if the caller means a different video than the one loaded.
@@ -287,6 +295,19 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     # -- loading a video ---------------------------------------------------
 
+    @app.post("/api/probe")
+    def probe():
+        """Whether a video is Chinese content, without downloading anything. The extension asks
+        this first so it stays silent on the user's English (or other) videos."""
+        url = str((request.get_json(silent=True) or {}).get("url", "")).strip()
+        if not url:
+            return error("No video URL given.")
+        try:
+            chinese = services.probe_video(url)
+        except FetchError as exc:
+            return error(exc.message, exc.status, exc.hint, exc.code)
+        return jsonify(chinese=chinese)
+
     @app.post("/api/load")
     def load():
         url = str((request.get_json(silent=True) or {}).get("url", "")).strip()
@@ -295,7 +316,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         try:
             data = services.fetch_video(url, settings.cache_dir)
         except FetchError as exc:
-            return error(exc.message, exc.status, exc.hint)
+            return error(exc.message, exc.status, exc.hint, exc.code)
 
         # The first run downloads the dictionary. Segmentation depends on it, so give it a moment.
         lang.wait_ready(DICTIONARY_WAIT_SECONDS)

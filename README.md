@@ -115,7 +115,7 @@ Then restart the browser. From now on the extension starts ytmine in the backgro
 
 To stop ytmine, press Quit ytmine at the top of its page, or run `ytmine --stop`. `ytmine --remove-shortcut`, `ytmine --autostart off` and `ytmine --browser-start off` undo the commands above. A ytmine running in the background writes its messages to `ytmine.log` in your cache directory (see Where your data lives).
 
-1. Paste a YouTube URL and press Load. The video needs Chinese subtitles. Manual subtitles are preferred, and auto-captions are the fallback. The status line under the video tells you which kind was used.
+1. Paste a YouTube URL and press Load. The video needs to be spoken in Chinese and have Chinese subtitles. Manual subtitles are preferred, and auto-captions are the fallback. YouTube's machine-translated Chinese captions on videos in other languages are not used. The status line under the video tells you which kind was used.
 2. Play the video. Press `M` when you hear a sentence you want.
 3. To blank out a word, click it in the transcript before pressing `M`. Click it again to undo.
 4. When you are done, press Download .apkg and open the file with Anki, or press Send to Anki.
@@ -215,7 +215,7 @@ The exact directories are chosen by [platformdirs](https://pypi.org/project/plat
 
 ## Browser extension: mine on youtube.com
 
-The extension puts the same captions, hover dictionary and click-to-mine on youtube.com itself, including in YouTube's own fullscreen. It is only the display. The ytmine program on your computer still gets the subtitles, looks words up, cuts the audio and builds the cards, so ytmine has to be running while you watch.
+The extension puts the same captions, hover dictionary and click-to-mine on youtube.com itself, including in YouTube's own fullscreen. It is only the display. The ytmine program on your computer still gets the subtitles, looks words up, cuts the audio and builds the cards, so ytmine has to be running while you watch. On videos that are not in Chinese the extension stays out of the way and shows nothing.
 
 It is not on any extension store. You load it from the `extension` folder of this repository.
 
