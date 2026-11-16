@@ -11,7 +11,7 @@ function say(text, ok) {
   el.textContent = text;
   el.className = ok === undefined ? "" : ok ? "ok" : "bad";
 }
-const scope = () => ($("all").checked ? "all" : "session");
+const scope = () => ($("all").checked ? "all" : "new");
 
 function button(label, onClick, disabled = false) {
   const b = document.createElement("button");
@@ -131,12 +131,14 @@ $("download").addEventListener("click", async () => {
   link.click();
   link.remove();
   say(`Saved ${name}. Open it with Anki to import.`, true);
+  refresh();
 });
 
 $("anki").addEventListener("click", async () => {
   try {
     const r = await ytmJson("/api/anki/send", { method: "POST", body: { scope: scope() } });
     say(`Anki imported ${r.notes} note${r.notes === 1 ? "" : "s"}. Notes it already had were updated.`, true);
+    refresh();
   } catch (e) { say(e.message, false); }
 });
 

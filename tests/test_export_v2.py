@@ -312,3 +312,16 @@ def test_vocab_definition_drops_the_repeated_reading_unless_there_are_several(tm
     )
     vocab = named(VOCAB_FIELDS, notes_of_model(notes, VOCAB_MODEL_ID)[0])
     assert vocab["Definition"].count('class="rd"') == 2
+
+
+def test_exporting_only_a_new_card_keeps_the_older_examples_of_its_word(tmp_path, media):
+    # The first card went to Anki earlier. Exporting only the second must still write the
+    # whole vocab note, or Anki would replace it with one that lost the first example.
+    first = v2_card(1)
+    second = v2_card(2, sentence="真是一举两得啊", target_start=2, english="Second example")
+    package = build_package([second], media, "Deck", vocab_context=[first, second])
+    notes, *_ = read_package(package, tmp_path / "r")
+    assert len(notes_of_model(notes, SENTENCE_V2_MODEL_ID)) == 1  # only the new sentence
+    vocab = named(VOCAB_FIELDS, notes_of_model(notes, VOCAB_MODEL_ID)[0])
+    assert vocab["SourceId"] == first["id"]
+    assert "Second example" in vocab["Examples"]

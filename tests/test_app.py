@@ -230,3 +230,32 @@ def test_overlay_script_is_served_and_the_page_loads_it_before_app_js(client):
     assert page.index("/static/overlay.js") < page.index("/static/app.js")
     assert 'id="stage"' in page and 'id="overlay-root"' in page
     assert client.get("/static/overlay.js").status_code == 200
+
+
+def test_export_skips_cards_already_in_anki(client):
+    load(client)
+    first = client.post("/api/mine", json={"line_index": 0}).get_json()
+    assert client.get("/api/export.apkg").status_code == 200
+    # Exported cards leave the default list and the next export.
+    assert client.get("/api/cards").get_json()["cards"] == []
+    again = client.get("/api/export.apkg")
+    assert again.status_code == 400 and "already in Anki" in again.get_json()["error"]
+    # "include cards already exported" still finds them.
+    assert len(client.get("/api/cards?scope=all").get_json()["cards"]) == 1
+    assert client.get("/api/export.apkg?scope=all").status_code == 200
+
+    # A newly mined card is exported on its own.
+    second = client.post("/api/mine", json={"line_index": 1}).get_json()
+    assert [c["id"] for c in client.get("/api/cards").get_json()["cards"]] == [second["id"]]
+    client.get("/api/export.apkg")
+
+    # Editing an exported card queues it again, so Anki gets the change.
+    client.patch(f"/api/cards/{first['id']}", json={"english": "Changed."})
+    assert [c["id"] for c in client.get("/api/cards").get_json()["cards"]] == [first["id"]]
+
+
+def test_a_failed_send_to_anki_leaves_cards_queued(client):
+    load(client)
+    client.post("/api/mine", json={"line_index": 0})
+    assert client.post("/api/anki/send", json={}).status_code == 502  # Anki is not running
+    assert len(client.get("/api/cards").get_json()["cards"]) == 1

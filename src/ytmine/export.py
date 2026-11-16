@@ -448,12 +448,16 @@ def build_package(
     deck_name: str,
     options: ExportOptions | None = None,
     lang: Language | None = None,
+    vocab_context: list[dict] | None = None,
 ) -> genanki.Package:
     """Assemble a genanki package with every card's notes and audio clips.
 
     Cards without `note_v` 2 go through the original note type into the original deck.
     New cards produce a v2 sentence note in `<deck>::Sentences` and, when they have a target
     word, one vocab note per headword in `<deck>::Vocab`.
+
+    `vocab_context` is every card (oldest first). When given, a vocab note is built from all of
+    them that mined the word, so exporting only some cards still writes the whole note.
     """
     options = options or ExportOptions()
     legacy_model, sentence_model, vocab_model = _model(), _sentence_model(), _vocab_model()
@@ -517,6 +521,16 @@ def build_package(
             )
         if options.vocab and card.get("target"):
             vocab_groups.setdefault(vocab_key(card, card_lang), []).append(card)
+
+    if vocab_context is not None and vocab_groups:
+        complete: dict[str, list[dict]] = {key: [] for key in vocab_groups}
+        for card in vocab_context:
+            if is_v2(card) and card.get("target"):
+                card_lang = lang or get_language(card.get("lang", "zh"))
+                key = vocab_key(card, card_lang)
+                if key in complete:
+                    complete[key].append(card)
+        vocab_groups = {key: group or vocab_groups[key] for key, group in complete.items()}
 
     for key, group in vocab_groups.items():
         card_lang = lang or get_language(group[0].get("lang", "zh"))

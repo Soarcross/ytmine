@@ -215,7 +215,13 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             video.audio_ready.set()
 
     def cards_for(scope: str) -> list[dict]:
-        return history.cards(session_id if scope == "session" else None)
+        """`new`: cards not exported yet (or edited since). `all`: every card. `session`: this
+        run's cards (older clients ask for it)."""
+        if scope == "all":
+            return history.cards()
+        if scope == "session":
+            return history.cards(session_id)
+        return history.unexported()
 
     # -- pages and status --------------------------------------------------
 
@@ -447,7 +453,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     @app.get("/api/cards")
     def list_cards():
-        scope = request.args.get("scope", "session")
+        scope = request.args.get("scope", "new")
         return jsonify(cards=[card_view(c) for c in reversed(cards_for(scope))])
 
     @app.patch("/api/cards/<card_id>")
@@ -614,32 +620,45 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         """Build the package for `scope`, or return an error response."""
         cards = cards_for(scope)
         if not cards:
-            return None, error("No cards to export yet. Mine a line first.")
+            if scope == "new" and history.cards():
+                return (
+                    None,
+                    None,
+                    error(
+                        "Every card is already in Anki. Mine new lines, or tick "
+                        "'include cards already exported' to export them again."
+                    ),
+                )
+            return None, None, error("No cards to export yet. Mine a line first.")
         package = export.build_package(
             cards,
             settings.media_dir,
             settings.deck_name,
             export.ExportOptions.from_settings(settings),
+            # Vocab notes list every card that mined the word, not just the ones exported now,
+            # or Anki would replace a word's note with one that lost its older examples.
+            vocab_context=history.cards(),
         )
         if export.note_count(package) == 0:
-            return None, error("Every card type is switched off in the settings.")
-        return package, None
+            return None, None, error("Every card type is switched off in the settings.")
+        return package, [c["id"] for c in cards], None
 
     @app.get("/api/export.apkg")
     def export_deck():
-        package, problem = build_export(request.args.get("scope", "session"))
+        package, card_ids, problem = build_export(request.args.get("scope", "new"))
         if problem:
             return problem
         name = f"ytmine-{time.strftime('%Y%m%d-%H%M%S')}.apkg"
         path = settings.exports_dir / name
         package.write_to_file(str(path))
+        history.mark_exported(card_ids)
         return send_file(path, as_attachment=True, download_name=name)
 
     @app.post("/api/anki/send")
     def send_to_anki():
         """Have Anki import the same .apkg the Download button gives you."""
-        scope = (request.get_json(silent=True) or {}).get("scope", "session")
-        package, problem = build_export(scope)
+        scope = (request.get_json(silent=True) or {}).get("scope", "new")
+        package, card_ids, problem = build_export(scope)
         if problem:
             return problem
         path = settings.exports_dir / f"ytmine-send-{time.strftime('%Y%m%d-%H%M%S')}.apkg"
@@ -648,6 +667,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             ankiconnect.import_package(path, settings.ankiconnect_url)
         except ankiconnect.AnkiConnectError as exc:
             return error(str(exc), 502)
+        history.mark_exported(card_ids)
         return jsonify(notes=export.note_count(package))
 
     return app

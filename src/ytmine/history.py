@@ -25,6 +25,14 @@ def sentence_key(text: str) -> str:
     return "".join(ch for ch in text if unicodedata.category(ch)[0] in ("L", "N"))
 
 
+def needs_export(card: dict) -> bool:
+    """True for a card Anki does not have in its current form."""
+    exported = card.get("exported_at")
+    if exported is None:
+        return True
+    return card.get("modified_at", 0) > exported
+
+
 class History:
     def __init__(self, path: Path):
         self.path = path
@@ -78,6 +86,11 @@ class History:
                 if session_id is None or c.get("session_id") == session_id
             ]
 
+    def unexported(self) -> list[dict]:
+        """Cards not yet sent to Anki, or edited since they were. Oldest first."""
+        with self._lock:
+            return [dict(c) for c in self._cards if needs_export(c)]
+
     def get(self, card_id: str) -> dict | None:
         with self._lock:
             card = next((c for c in self._cards if c["id"] == card_id), None)
@@ -112,6 +125,16 @@ class History:
             self._count(card, 1)
             self._save()
             return dict(card)
+
+    def mark_exported(self, card_ids, when: float | None = None) -> None:
+        """Note that these cards went into an export, without changing their modified time."""
+        when = time.time() if when is None else when
+        wanted = set(card_ids)
+        with self._lock:
+            for card in self._cards:
+                if card["id"] in wanted:
+                    card["exported_at"] = when
+            self._save()
 
     def delete(self, card_id: str) -> dict | None:
         """Remove a card. Its sentence can be mined again afterwards."""

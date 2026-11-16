@@ -601,14 +601,14 @@ async function deleteCard(card) {
 }
 
 async function refreshCards() {
-  const scope = state.sessionAll ? "all" : "session";
+  const scope = state.sessionAll ? "all" : "new";
   try { state.cards = (await api(`/api/cards?scope=${scope}`)).cards; renderCards(); } catch (e) { toast(e.message, true); }
 }
 
 $("all-sessions").addEventListener("change", (e) => { state.sessionAll = e.target.checked; refreshCards(); });
 
 $("export-btn").addEventListener("click", async () => {
-  const scope = state.sessionAll ? "all" : "session";
+  const scope = state.sessionAll ? "all" : "new";
   try {
     const response = await fetch(`/api/export.apkg?scope=${scope}`);
     if (!response.ok) throw new Error((await response.json()).error || "Export failed.");
@@ -620,13 +620,15 @@ $("export-btn").addEventListener("click", async () => {
     a.remove();
     URL.revokeObjectURL(url);
     toast(`Saved ${name}. Open it with Anki to import.`);
+    refreshCards();
   } catch (e) { toast(e.message, true); }
 });
 
 $("anki-btn").addEventListener("click", async () => {
   try {
-    const r = await api("/api/anki/send", { method: "POST", body: { scope: state.sessionAll ? "all" : "session" } });
+    const r = await api("/api/anki/send", { method: "POST", body: { scope: state.sessionAll ? "all" : "new" } });
     toast(`Anki imported ${r.notes} note${r.notes === 1 ? "" : "s"}. Notes it already had were updated.`);
+    refreshCards();
   } catch (e) { toast(e.message, true); }
 });
 
