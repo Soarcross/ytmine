@@ -410,8 +410,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         if last > index:  # multi-line cards get their end too, so ids never collide
             card_id += f"_{int(round(end * 1000))}"
         audio_file = f"ytmine_{card_id}.mp3"
+        following = video.lines[last + 1].start if last + 1 < len(video.lines) else None
         clip_start, clip_length = clips.clip_window(
-            start, end, settings.padding, video.data.duration
+            start, end, settings.padding, video.data.duration, next_start=following
         )
         try:
             services.cut_clip(

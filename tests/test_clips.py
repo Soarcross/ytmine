@@ -7,13 +7,13 @@ from ytmine.clips import ClipError, clip_window, cut_clip
 
 
 def test_clip_window_adds_padding_both_sides():
-    start, length = clip_window(10.0, 12.0, padding=0.3)
+    start, length = clip_window(10.0, 12.0, padding=0.3, next_start=12.1)
     assert start == pytest.approx(9.7)
     assert length == pytest.approx(2.6)
 
 
 def test_clip_window_never_starts_before_zero():
-    start, length = clip_window(0.1, 2.0, padding=0.3)
+    start, length = clip_window(0.1, 2.0, padding=0.3, next_start=2.0)
     assert start == 0.0
     assert length == pytest.approx(2.3)
 
@@ -22,6 +22,22 @@ def test_clip_window_clamps_to_audio_length():
     start, length = clip_window(58.0, 60.0, padding=0.3, max_duration=60.0)
     assert start == pytest.approx(57.7)
     assert length == pytest.approx(2.3)
+
+
+def test_clip_window_runs_into_the_gap_before_the_next_cue():
+    # A real case: the cue ended at a pause and 详情页面 was spoken in the gap after it.
+    start, length = clip_window(501.166, 504.3, padding=0.3, next_start=506.733)
+    assert start + length == pytest.approx(504.3 + 1.2)
+
+
+def test_clip_window_stops_short_of_a_close_next_cue():
+    start, length = clip_window(10.0, 12.0, padding=0.3, next_start=12.8)
+    assert start + length == pytest.approx(12.75)
+
+
+def test_clip_window_after_the_last_line_runs_on():
+    start, length = clip_window(10.0, 12.0, padding=0.3)
+    assert start + length == pytest.approx(13.2)
 
 
 def test_clip_window_past_the_end_is_empty():

@@ -10,19 +10,33 @@ class ClipError(Exception):
     """ffmpeg failed to produce a clip."""
 
 
+# Subtitle cues often end early: a cue can stop at a pause in the middle of a sentence while
+# the last words are spoken in the silence-on-screen gap before the next cue. So a clip may run
+# this far past the cue's end into such a gap, but never into the next cue.
+GAP_TAIL = 1.2  # seconds
+NEXT_CUE_MARGIN = 0.05  # seconds kept clear before the next cue starts
+
+
 def clip_window(
     start: float,
     end: float,
     padding: float = 0.3,
     max_duration: float | None = None,
+    next_start: float | None = None,
 ) -> tuple[float, float]:
     """Return `(clip_start, clip_length)` in seconds for a line.
 
-    The line is widened by `padding` on both sides. The start never goes below
-    zero, and the end is clamped to `max_duration` (the audio length) if given.
+    The line is widened by `padding` on both sides. If the next cue starts later than that
+    (`next_start`; None after the last line), the end also runs into the gap, up to `GAP_TAIL`
+    after the line and never past the next cue. The start never goes below zero, and the end
+    is clamped to `max_duration` (the audio length) if given.
     """
     clip_start = max(0.0, start - padding)
     clip_end = end + padding
+    into_gap = end + GAP_TAIL
+    if next_start is not None:
+        into_gap = min(into_gap, next_start - NEXT_CUE_MARGIN)
+    clip_end = max(clip_end, into_gap)
     if max_duration is not None:
         clip_end = min(clip_end, max_duration)
     return clip_start, max(0.0, clip_end - clip_start)

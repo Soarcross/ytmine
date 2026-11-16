@@ -80,7 +80,8 @@ def test_mine_creates_card_with_clip_and_pinyin(client):
     assert card["sentence"] == "我喜欢学习中文。"
     assert card["pinyin"].startswith("wǒ xǐ huān")
     assert card["english"] == "I like studying Chinese."
-    assert cut_calls[0] == pytest.approx((1.7, 2.6))
+    # The next line starts at 5.0 s, so the clip runs into the gap up to 4.95 s.
+    assert cut_calls[0] == pytest.approx((1.7, 3.25))
     assert client.get(card["audio_url"]).data == b"fake mp3"
 
 
@@ -179,7 +180,7 @@ def test_mine_a_span_of_lines_as_one_card(client):
     assert card["sentence"] == "我喜欢学习中文。今天天气很好。"
     assert card["id"] == "abcdefghijk_2000_7000"  # differs from the single-line card's id
     assert card["parts"] == {"before": "我喜欢学习中文。今天天气", "target": "很", "after": "好。"}
-    assert cut_calls[0] == pytest.approx((1.7, 5.6))
+    assert cut_calls[0] == pytest.approx((1.7, 6.5))  # 1.2 s into the gap after 7.0 s
     # The single first line is a different sentence, so it can still be mined.
     assert client.post("/api/mine", json={"line_index": 0}).status_code == 201
 
