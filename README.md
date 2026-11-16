@@ -172,6 +172,8 @@ Decks are laid out as `<deck name>::Sentences` and `<deck name>::Vocab`, with `<
 
 Download .apkg gives you a file to import. The deck and note type IDs are fixed, so importing a newer export updates the same deck and notes instead of making copies.
 
+An export holds only the cards Anki does not have yet: cards you have never exported, and cards you edited in ytmine after exporting them. The card list shows the same cards. Tick "include cards already exported" to see and export all of them. A card counts as exported once its .apkg is downloaded, even if you never import the file, so import each download you make. A vocab note always lists every sentence you mined for that word, even when only one of them is new.
+
 Send to Anki makes the same file and asks Anki to import it through the [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on (code 2055492159). Anki must be running. Both routes use the same note types and the same note IDs, so you can use either one, or both, without getting duplicates. Anki reads the file from your disk, so if Anki runs in a sandbox that cannot see it (Flatpak or Snap), Send to Anki reports an error. Use Download .apkg in that case.
 
 Each note in an `.apkg` carries the time the card was mined or last edited in ytmine. When you import a newer export, Anki only replaces notes you have not changed in Anki since then, so your edits in Anki are kept. A vocab note counts as changed when you mine another example for it.
@@ -179,6 +181,8 @@ Each note in an `.apkg` carries the time the card was mined or last edited in yt
 ### If you used an earlier version
 
 Cards mined before the vocab and subdeck update stay on the original "ytmine Mandarin sentence" note type and in the original deck, and they keep exporting that way. Nothing in your existing Anki collection is changed or moved. New mining goes to the new note types, in the `Sentences` and `Vocab` subdecks.
+
+The first export after updating to a version that skips already exported cards includes every card, because older versions did not record what was exported. Importing it is safe and adds no duplicates (with the exception below). After that, exports hold only new and edited cards.
 
 If you used Send to Anki before, those notes were added one by one with random IDs. Sending those cards again now imports them with a stable ID, which Anki does not match to the old copies, so you would get a second copy. Delete the old copies in Anki first if you want a single one.
 
@@ -251,13 +255,15 @@ The hotkeys use letters YouTube does not use, so they do not fight its own short
 
 You can change them in the options page. They do nothing while you are typing in a text box. Mining is mostly by click, so you may never need them.
 
-The toolbar icon opens a list of this session's cards, with Edit and Delete, plus Download .apkg and Send to Anki.
+The toolbar icon opens the list of cards not yet in Anki, with Edit and Delete, plus Download .apkg and Send to Anki.
 
-If ytmine is not running, the video shows "Start ytmine on your computer". If the extension is not connected yet, the video says so and has an Open ytmine button. Once the ytmine page has opened, the video loads by itself.
+On a video that is not in Chinese the extension shows nothing at all. It checks the video's language and caption tracks first, and YouTube's machine-translated Chinese captions on an English video do not count.
+
+If ytmine is not running and you have not turned on `ytmine --browser-start`, the video shows "Start ytmine on your computer". If the extension is not connected yet, the video says so and has an Open ytmine button. Once the ytmine page has opened, the video loads by itself.
 
 ### What the extension is allowed to do
 
-- It runs on `https://www.youtube.com/`, plus a small helper on pages at `127.0.0.1` and `localhost` that does nothing unless the page is ytmine's own. It can talk only to `127.0.0.1` and `localhost`. It asks for the `storage` permission and nothing else.
+- It runs on `https://www.youtube.com/`, plus a small helper on pages at `127.0.0.1` and `localhost` that does nothing unless the page is ytmine's own. It can talk only to `127.0.0.1` and `localhost`. It asks for two permissions: `storage` for its settings, and `nativeMessaging` so it can start ytmine. Native messaging reaches only the helper that `ytmine --browser-start on` registers, and does nothing until you run that command.
 - The ytmine server still refuses every web page, youtube.com included. The extension does not call the server from the YouTube page. A background worker in the extension makes the requests, so they come from the extension and not from youtube.com, and they carry the pairing token.
 - The token is a random value made the first time ytmine runs and saved in your config directory (`pairing_token`, next to `config.json`). Anyone who has it and runs an extension on your computer can use ytmine, so treat it like a password. Delete the file and restart ytmine to get a new one. The extension picks up the new token the next time the ytmine page opens.
 - The extension gets the token from ytmine's own page. The server gives it only to that page, which could already use ytmine without it, and refuses every other website and extension.
@@ -267,13 +273,13 @@ If ytmine is not running, the video shows "Start ytmine on your computer". If th
 ## FAQ
 
 Which videos work?
-Any public video that has Chinese manual subtitles or Chinese auto-captions. Age-restricted, private and members-only videos will not load. Subtitles that are part of the picture (burned in) cannot be read; the video needs a real caption track.
+Any public video spoken in Chinese that has Chinese manual subtitles or Chinese auto-captions. Videos in other languages are refused even when YouTube offers machine-translated Chinese captions for them, because those are a translation and not what is said. Age-restricted, private and members-only videos will not load. Subtitles that are part of the picture (burned in) cannot be read; the video needs a real caption track.
 
 The video says "This video is unavailable".
 The owner has blocked it from playing outside YouTube. ytmine switches to the audio it downloaded, so the transcript, hotkeys and mining still work; you just don't see the picture.
 
 Why does a card's audio start or end a little off?
-Subtitle timing is only as good as the uploader made it. Auto-captions are looser than manual ones. Raise `padding` in `config.json` if clips cut off too early.
+Subtitle timing is only as good as the uploader made it. Auto-captions are looser than manual ones. A caption often ends at a pause before the sentence is finished, so ytmine lets each clip run up to 1.2 seconds past the caption into the quiet gap, stopping just before the next caption starts. Raise `padding` in `config.json` if clips still cut off too early. Cards you mined before this change keep their old clips; delete and mine them again to recut them.
 
 The Chinese came from auto-captions and has mistakes. What now?
 Auto-caption text is machine generated, and it does get words wrong: it can turn 一席崩塌 into 一夕, for example. Dictionary lookups and idiom detection work on the text as captioned, so a wrong word gives a wrong lookup. Click the pencil on the video caption to correct a line before you mine it. To fix a card you already mined, use the Edit button in the card panel.
