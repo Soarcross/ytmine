@@ -105,7 +105,15 @@ ytmine --autostart on
 
 It then opens no browser tab at login. Open the page with the icon, or with open ytmine in the extension's menu.
 
-To stop ytmine, press Quit ytmine at the top of its page, or run `ytmine --stop`. `ytmine --remove-shortcut` and `ytmine --autostart off` undo the two commands above. A ytmine running in the background writes its messages to `ytmine.log` in your cache directory (see Where your data lives).
+If you use the browser extension, you can let the extension start ytmine for you instead:
+
+```bash
+ytmine --browser-start on
+```
+
+Then restart the browser. From now on the extension starts ytmine in the background when the browser starts, and again whenever it finds ytmine not running. It also connects by itself, so you never need the pairing token. This works in Chrome, Edge, Chromium and Brave, and should work in Firefox (not tested yet). It registers a small helper with each browser: a registry entry under your user on Windows, or a file in the browser's profile folder on macOS and Linux.
+
+To stop ytmine, press Quit ytmine at the top of its page, or run `ytmine --stop`. `ytmine --remove-shortcut`, `ytmine --autostart off` and `ytmine --browser-start off` undo the commands above. A ytmine running in the background writes its messages to `ytmine.log` in your cache directory (see Where your data lives).
 
 1. Paste a YouTube URL and press Load. The video needs Chinese subtitles. Manual subtitles are preferred, and auto-captions are the fallback. The status line under the video tells you which kind was used.
 2. Play the video. Press `M` when you hear a sentence you want.

@@ -114,6 +114,29 @@ def _autostart(on: bool) -> int:
     return 0
 
 
+def _browser_start(on: bool) -> int:
+    from ytmine import launcher, nativehost
+
+    try:
+        done = nativehost.set_browser_start(on)
+    except (launcher.LauncherError, OSError) as exc:
+        print(f"Could not change start with the browser: {exc}", file=sys.stderr)
+        return 1
+    if on:
+        print("The ytmine browser extension can now start ytmine by itself: when the browser")
+        print("starts, and whenever it finds ytmine not running. Registered in:")
+        for item in done:
+            print(f"  {item}")
+        print("Restart the browser (or reload the extension) for it to take effect.")
+    else:
+        print(
+            "The extension will no longer start ytmine."
+            if done
+            else "Start with the browser was off."
+        )
+    return 0
+
+
 def _shortcut_tip() -> str:
     """One line suggesting the shortcut, shown at start-up in a terminal until one exists."""
     from ytmine import launcher
@@ -158,6 +181,12 @@ def main(argv: list[str] | None = None) -> int:
         help="start ytmine in the background whenever you log in (on), or stop doing that (off)",
     )
     parser.add_argument(
+        "--browser-start",
+        choices=("on", "off"),
+        help="let the browser extension start ytmine when the browser starts (on), "
+        "or stop that (off)",
+    )
+    parser.add_argument(
         "--background",
         action="store_true",
         help="write messages to a log file instead of the terminal "
@@ -192,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.autostart:
         return _autostart(args.autostart == "on")
+
+    if args.browser_start:
+        return _browser_start(args.browser_start == "on")
 
     # Started twice (say, from the shortcut while it already runs from login): open the running one.
     running = instance.find_running(args.port or DEFAULT_PORT)

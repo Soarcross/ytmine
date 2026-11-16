@@ -96,7 +96,7 @@ function ytmProblem(reply) {
   if (reply.error === "reloaded") return "The ytmine extension was reloaded. Refresh this page.";
   if (reply.error === "no-token") return "Not connected yet. Open the ytmine page once (it opens when you start ytmine) and the extension connects by itself.";
   if (reply.error === "bad-server") return "The server address in the ytmine extension options must be on this computer (127.0.0.1 or localhost).";
-  if (reply.error === "unreachable") return "Start ytmine on your computer, then try again.";
+  if (reply.error === "unreachable") return "Start ytmine on your computer, then try again. (Run `ytmine --browser-start on` once and the extension starts it for you.)";
   if (reply.status === 403) return "ytmine has a new pairing token. Open the ytmine page once and the extension reconnects by itself.";
   return "";
 }

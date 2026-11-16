@@ -24,7 +24,8 @@ def test_manifest_is_mv3_with_the_expected_pieces(manifest):
 
 
 def test_permissions_are_minimal(manifest):
-    assert manifest["permissions"] == ["storage"]
+    # nativeMessaging only reaches the host that `ytmine --browser-start on` registers.
+    assert manifest["permissions"] == ["storage", "nativeMessaging"]
     # No tabs, downloads, cookies, history or webRequest.
     assert not manifest.get("optional_permissions")
     assert "web_accessible_resources" not in manifest  # nothing the page can load from us

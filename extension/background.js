@@ -11,6 +11,9 @@ const api = globalThis.browser || globalThis.chrome;
 const TOKEN_HEADER = "X-Ytmine-Token";
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const DEFAULT_SERVER = "http://127.0.0.1:8787";
+// Registered by `ytmine --browser-start on`. It starts ytmine and replies with its port and token.
+const NATIVE_HOST = "io.github.soarcross.ytmine";
+const START_RETRY_MS = 30000; // after a failed start, wait this long before trying again
 
 /** The server URL from the options, or null if it is not on this computer. */
 function serverBase(stored) {
@@ -27,7 +30,34 @@ function toBase64(buffer) {
   return btoa(binary);
 }
 
-async function callServer({ path, method = "GET", body, binary = false }) {
+let starting = null;
+let lastFailedStart = 0;
+
+/** Ask the native host to start ytmine (if it is not running). Resolves true once it runs. */
+function startServer() {
+  if (starting) return starting; // one start at a time, however many tabs ask
+  if (Date.now() - lastFailedStart < START_RETRY_MS) return Promise.resolve(false);
+  starting = (async () => {
+    try {
+      // Throws when the host is not registered (ytmine --browser-start was never run).
+      const reply = await api.runtime.sendNativeMessage(NATIVE_HOST, { cmd: "start" });
+      if (!reply || !reply.ok || !Number.isInteger(reply.port)) throw new Error("not started");
+      const update = { server: `http://127.0.0.1:${reply.port}` };
+      if (typeof reply.token === "string" && reply.token.length >= 20) update.token = reply.token;
+      await api.storage.local.set(update);
+      return true;
+    } catch (e) {
+      lastFailedStart = Date.now();
+      return false;
+    } finally {
+      starting = null;
+    }
+  })();
+  return starting;
+}
+
+async function callServer(message, retry = true) {
+  const { path, method = "GET", body, binary = false } = message;
   // Only ytmine's own API. A page cannot use this worker to fetch anything else.
   if (typeof path !== "string" || !path.startsWith("/api/") || path.includes("..")) {
     return { ok: false, status: 0, error: "bad-path" };
@@ -35,7 +65,10 @@ async function callServer({ path, method = "GET", body, binary = false }) {
   const { server, token } = await api.storage.local.get({ server: DEFAULT_SERVER, token: "" });
   const base = serverBase(server);
   if (!base) return { ok: false, status: 0, error: "bad-server" }; // never send the token elsewhere
-  if (!token) return { ok: false, status: 0, error: "no-token" };
+  if (!token) {
+    if (retry && await startServer()) return callServer(message, false);
+    return { ok: false, status: 0, error: "no-token" };
+  }
 
   const headers = { [TOKEN_HEADER]: token };
   const init = { method, headers };
@@ -47,6 +80,8 @@ async function callServer({ path, method = "GET", body, binary = false }) {
   try {
     response = await fetch(base + path, init);
   } catch (e) {
+    // Not running: start it if the native host is installed, then try once more.
+    if (retry && await startServer()) return callServer(message, false);
     return { ok: false, status: 0, error: "unreachable" };
   }
   if (binary && response.ok) {
@@ -90,8 +125,12 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // the answer is sent asynchronously
 });
 
+// Start ytmine with the browser. Does nothing unless `ytmine --browser-start on` was run.
+api.runtime.onStartup.addListener(() => { startServer(); });
+
 // A first install opens the options page, which says how to connect.
 api.runtime.onInstalled.addListener((details) => {
   // It can fail if no browser window is open yet; the toolbar popup links to the options too.
   if (details.reason === "install") Promise.resolve(api.runtime.openOptionsPage()).catch(() => {});
+  startServer();
 });
